@@ -1,0 +1,13 @@
+add_subdirectory(fastmarching)
+add_subdirectory(field)
+add_subdirectory(io)
+add_subdirectory(rsf)
+add_subdirectory(surface)
+add_subdirectory(utils)
+
+# target_include_directories(fastmarching)
+# target_include_directories(field)
+# target_include_directories(io)
+# target_include_directories(rsf)
+# target_include_directories(surface)
+# target_include_directories(utils)

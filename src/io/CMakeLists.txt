@@ -1,0 +1,15 @@
+set(SOURCE
+  ${SOURCE}
+  PARENT_SCOPE
+)
+
+set(HEADERS
+   ${HEADERS}
+   ${CMAKE_CURRENT_SOURCE_DIR}/argparse.hpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/common.hpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/metadata.hpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/npy.hpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/tgf.hpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/wavefront.hpp
+   PARENT_SCOPE
+)

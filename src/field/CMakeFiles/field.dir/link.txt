@@ -1,0 +1,2 @@
+/usr/bin/ar qc libfield.a CMakeFiles/field.dir/RawField.cpp.o
+/usr/bin/ranlib libfield.a
