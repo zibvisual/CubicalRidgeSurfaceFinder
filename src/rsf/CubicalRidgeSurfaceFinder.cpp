@@ -84,37 +84,23 @@ namespace ridgesurface
         , ts_integralcurve1(nullptr)
         , ts_integralcurve2(nullptr)
         , m_fm(progress)
-        , m_cum_label(nullptr)
+        , m_cum_label()
         , m_probability(nullptr)
-        , m_cum_time(nullptr)
-        , m_cum_distance(nullptr)
+        , m_cum_time()
+        , m_cum_distance()
         , m_patched_surface()
         , m_patch_orientation()
         , m_surface_writer()
         , m_seedpoints_candidates()
         , m_lattice(Lattice(Dims(0,0,0)))
     {
+        m_cum_label.setUndefinedValue(0);
+        m_cum_time.setUndefinedValue(INFINITY);
+        m_cum_distance.setUndefinedValue(INFINITY);
     }
 
     CubicalRidgeSurfaceFinder::~CubicalRidgeSurfaceFinder()
     {
-        if (m_cum_label)
-        {
-            free(m_cum_label);
-            m_cum_label = nullptr;
-        }
-
-        if (m_cum_time)
-        {
-            free(m_cum_time);
-            m_cum_time = nullptr;
-        }
-
-        if (m_cum_distance)
-        {
-            free(m_cum_distance);
-            m_cum_distance = nullptr;
-        }
     }
 
     void
@@ -127,10 +113,9 @@ namespace ridgesurface
             m_lattice = Lattice();
         }
 
-        // if lattice size is different, we need to allocate more memory to m_cum_label
-        m_cum_label = static_cast<std::size_t*>(realloc(m_cum_label, m_lattice.size() * sizeof(std::size_t)));
-        m_cum_time = static_cast<float*>(realloc(m_cum_time, m_lattice.size() * sizeof(float)));
-        m_cum_distance = static_cast<float*>(realloc(m_cum_distance, m_lattice.size() * sizeof(float)));
+        m_cum_label.resize(m_lattice.dims());
+        m_cum_time.resize(m_lattice.dims());
+        m_cum_distance.resize(m_lattice.dims());
 
         resetFields();
     }
@@ -162,13 +147,9 @@ namespace ridgesurface
     void
     CubicalRidgeSurfaceFinder::resetFields()
     {
-        // TODO: use memset
-        for (std::size_t i = 0; i < m_lattice.size(); ++i)
-        {
-            m_cum_time[i] = INFINITY;
-            m_cum_distance[i] = INFINITY;
-            m_cum_label[i] = 0;
-        }
+        m_cum_label.fill();
+        m_cum_time.fill();
+        m_cum_distance.fill();
     }
 
     const Seed&
@@ -187,22 +168,22 @@ namespace ridgesurface
     const Seed*
     CubicalRidgeSurfaceFinder::getSeedFromVoxel(std::size_t id) const
     {
-        if (m_cum_label[id] < 2)
+        if (m_cum_label.data()[id] < 2)
         {
             return nullptr;
         }
-        auto seed = label_to_seed(m_cum_label[id]);
+        auto seed = label_to_seed(m_cum_label.data()[id]);
         return &m_seeds[seed];
     }
 
     std::optional<std::size_t>
     CubicalRidgeSurfaceFinder::getSeedIndexFromVoxel(std::size_t id) const
     {
-        if (m_cum_label[id] < 2)
+        if (m_cum_label.data()[id] < 2)
         {
             return std::optional<std::size_t>();
         }
-        return label_to_seed(m_cum_label[id]);
+        return label_to_seed(m_cum_label.data()[id]);
     }
 
     // Seed changes
@@ -225,7 +206,7 @@ namespace ridgesurface
             {
                 auto face = Face::fromIndex(m_seedpoints_candidates[i][j]);
                 auto voxel = face.startId();
-                auto distance = m_cum_distance[voxel];
+                auto distance = m_cum_distance.data()[voxel];
                 auto maxDistance = m_seeds[i].getDistance();
                 auto f = distance / maxDistance;
                 if (f > max)
@@ -267,7 +248,7 @@ namespace ridgesurface
         {
             auto face = Face::fromIndex(m_seedpoints_candidates[index][j]);
             auto voxel = face.startId();
-            std::size_t seed = label_to_seed(m_cum_label[voxel]);
+            std::size_t seed = label_to_seed(m_cum_label.data()[voxel]);
             if (seed == index)
             {
                 fully_covered = false;
@@ -295,7 +276,7 @@ namespace ridgesurface
             {
                 auto face = Face::fromIndex(m_seedpoints_candidates[i][j]);
                 auto voxel = face.startId();
-                auto distance = m_cum_distance[voxel];
+                auto distance = m_cum_distance.data()[voxel];
                 if (distance < minDistance)
                 {
                     // delete this entry
@@ -373,15 +354,21 @@ namespace ridgesurface
     }
 
     void
-    CubicalRidgeSurfaceFinder::castToTime(float* time)
+    CubicalRidgeSurfaceFinder::castToTime(float* time) const
     {
-        memcpy(time, m_cum_time, m_lattice.size() * sizeof(float));
+        for(std::size_t i = 0; i < m_lattice.size(); ++i){
+            // TODO: we should instead use a get method from m_cum_time
+            time[i] = m_cum_time.data()[i];
+        }
     }
 
     void
-    CubicalRidgeSurfaceFinder::castToDistance(float* distance)
+    CubicalRidgeSurfaceFinder::castToDistance(float* distance) const
     {
-        memcpy(distance, m_cum_distance, m_lattice.size() * sizeof(float));
+        for(std::size_t i = 0; i < m_lattice.size(); ++i){
+            // TODO: we should instead use a get method from m_cum_distance
+            distance[i] = m_cum_distance.data()[i];
+        }
     }
 
     // void
@@ -443,7 +430,7 @@ namespace ridgesurface
     {
         for (std::size_t i = 0; i < m_lattice.size(); ++i)
         {
-            labels[i] = static_cast<uint16_t>(m_cum_label[i]);
+            labels[i] = static_cast<uint16_t>(m_cum_label.data()[i]);
         }
     }
 
@@ -558,13 +545,14 @@ namespace ridgesurface
         {
             // this assertion might trigger sometimes...
             // assert(m_cum_label[i] != 0);
-            auto seed = label_to_seed(m_cum_label[j]);
+            auto seed = label_to_seed(m_cum_label.data()[j]);
             // if m_seeds_change.wasDeleted(seed)
             if (seed == i)
             {
-                m_cum_label[j] = 0;
-                m_cum_time[j] = INFINITY;
-                m_cum_distance[j] = INFINITY;
+                //TODO: m_cum_label are not pointers anymore...!
+                m_cum_label.data()[j] = m_cum_label.getUndefinedValue();
+                m_cum_time.data()[j] = INFINITY;
+                m_cum_distance.data()[j] = INFINITY;
             }
         }
         // graphs
@@ -596,7 +584,7 @@ namespace ridgesurface
         for (int64_t i : m_seeds_voxels[right])
         { // this assertion might trigger sometimes...
             //            assert(m_cum_label[i]);
-            m_cum_label[i] = seed_to_label(left, m_cum_label[i]);
+            m_cum_label.data()[i] = seed_to_label(left, m_cum_label.data()[i]);
         }
         // replace ids in graph
         m_graph.replaceNodes(left, right);
@@ -815,13 +803,13 @@ namespace ridgesurface
     bool
     CubicalRidgeSurfaceFinder::faceBetweenVoxels(std::size_t i, std::size_t j) const
     {
-        bool validLabels = m_cum_label[i] > 0 && m_cum_label[j] > 0;
+        bool validLabels = m_cum_label.data()[i] > 0 && m_cum_label.data()[j] > 0;
         if (!validLabels)
         {
             return false;
         }
-        auto seed1 = label_to_seed(m_cum_label[i]);
-        auto seed2 = label_to_seed(m_cum_label[j]);
+        auto seed1 = label_to_seed(m_cum_label.data()[i]);
+        auto seed2 = label_to_seed(m_cum_label.data()[j]);
         // Test: Performance improvement?
         // if(seed1 == seed2){
         //     return (m_cum_label[i] % 2) != (m_cum_label[j] % 2);
@@ -832,7 +820,7 @@ namespace ridgesurface
             // if it is no neighbor, we do not generate any faces
             return false;
         }
-        auto border = ((m_cum_label[i] % 2) != (m_cum_label[j] % 2)) ^ polarity.value();
+        auto border = ((m_cum_label.data()[i] % 2) != (m_cum_label.data()[j] % 2)) ^ polarity.value();
         return border;
     }
 
@@ -866,8 +854,8 @@ namespace ridgesurface
                         // {
                         //     graph->addEdge(firstSeed, secondSeed);
                         // }
-                        auto orientation = m_patch_orientation[label_to_seed(m_cum_label[index])];
-                        if ((m_cum_label[index] % 2 == 1) ^ orientation)
+                        auto orientation = m_patch_orientation[label_to_seed(m_cum_label.data()[index])];
+                        if ((m_cum_label.data()[index] % 2 == 1) ^ orientation)
                         {
                             faces.insert(Face(index, Direction::RIGHT));
                         }
@@ -891,8 +879,8 @@ namespace ridgesurface
                     std::size_t j = i + dims[0];
                     if (faceBetweenVoxels(i, j))
                     {
-                        auto orientation = m_patch_orientation[label_to_seed(m_cum_label[i])];
-                        if ((m_cum_label[i] % 2 == 1) ^ orientation)
+                        auto orientation = m_patch_orientation[label_to_seed(m_cum_label.data()[i])];
+                        if ((m_cum_label.data()[i] % 2 == 1) ^ orientation)
                         {
                             faces.insert(Face(i, Direction::UP));
                         }
@@ -916,8 +904,8 @@ namespace ridgesurface
                     std::size_t j = i + dims[0] * dims[1];
                     if (faceBetweenVoxels(i, j))
                     {
-                        auto orientation = m_patch_orientation[label_to_seed(m_cum_label[i])];
-                        if ((m_cum_label[i] % 2 == 1) ^ orientation)
+                        auto orientation = m_patch_orientation[label_to_seed(m_cum_label.data()[i])];
+                        if ((m_cum_label.data()[i] % 2 == 1) ^ orientation)
                         {
                             faces.insert(Face(i, Direction::FORWARD));
                         }
@@ -977,17 +965,19 @@ namespace ridgesurface
         for (auto faceId : m_patch)
         {
             auto face = Face::fromIndex(faceId);
-            // check if face startId and endId have label from the same seed
-            auto startId = face.startId();
-            auto maybeEndId = face.validEndId(m_lattice.dims());
-            if (!maybeEndId)
-            {
-                continue;
-            }
-            auto endId = maybeEndId.value();
+            // // check if face startId and endId have label from the same seed
+            // auto startId = face.startId();
+            // auto maybeEndId = face.validEndId(m_lattice.dims());
+            // if (!maybeEndId)
+            // {
+            //     continue;
+            // }
+            // auto endId = maybeEndId.value();
 
-            auto startLabel = m_cum_label[startId];
-            auto endLabel = m_cum_label[endId];
+            auto startLabel = m_cum_label.get_or(face.startVoxel(m_lattice.dims()));
+            auto endLabel = m_cum_label.get_or(face.endVoxel(m_lattice.dims()));
+            // auto startLabel = m_cum_label[startId];
+            // auto endLabel = m_cum_label[endId];
             if ((startLabel != endLabel) && startLabel && endLabel)
             {
                 auto seed = label_to_seed(startLabel);
@@ -1015,9 +1005,9 @@ namespace ridgesurface
         m_graph.addEdge(seed, seed, false);
 
         auto face_cost = [this](Face face) {
-            auto cost = m_cum_time[face.startId()];
+            auto cost = m_cum_time.data()[face.startId()];
             auto endId = face.validEndId(m_lattice.dims());
-            return endId ? cost + m_cum_time[endId.value()] : cost + cost;
+            return endId ? cost + m_cum_time.data()[endId.value()] : cost + cost;
         };
 
         // get min face by time
@@ -1059,7 +1049,7 @@ namespace ridgesurface
                 // check if neighbor is in other seed point territory
                 // one voxel on either side is enough, so we just check start_id of face
                 auto voxel_id = Face::fromIndex(neighbor_id).startId();
-                auto voxel_label = m_cum_label[voxel_id];
+                auto voxel_label = m_cum_label.data()[voxel_id];
                 if (voxel_label == 0 || label_to_seed(voxel_label) == i)
                 {
                     // grow
@@ -1093,12 +1083,12 @@ namespace ridgesurface
         {
             auto index = pair.first;
             auto cur_label = static_cast<std::size_t>(pair.second & 1);
-            if (m_cum_label[index] == 0)
+            if (m_cum_label.data()[index] == 0)
             {
                 continue;
             }
-            auto cum_label = m_cum_label[index] & 1;
-            auto cum_seed = label_to_seed(m_cum_label[index]);
+            auto cum_label = m_cum_label.data()[index] & 1;
+            auto cum_seed = label_to_seed(m_cum_label.data()[index]);
             // check if we have cum_seed in neighbors
             if (neighbors.find(cum_seed) != neighbors.end())
             {
@@ -1239,9 +1229,9 @@ namespace ridgesurface
             // std::size_t cur_label = orientation ? static_cast<std::size_t>((i << 1) + 2 + (pair.second & 1)) : static_cast<std::size_t>((i << 1) + 3 - (pair.second & 1));
             std::size_t cur_label = static_cast<std::size_t>((i << 1) + 2 + (pair.second & 1));
             auto time = time_view.get(index);
-            m_cum_label[index] = time < m_cum_time[index] ? cur_label : m_cum_label[index];
-            m_cum_distance[index] = time < m_cum_time[index] ? distance_view.get(index) : m_cum_distance[index];
-            m_cum_time[index] = time < m_cum_time[index] ? time : m_cum_time[index];
+            m_cum_label.data()[index] = time < m_cum_time.data()[index] ? cur_label : m_cum_label.data()[index];
+            m_cum_distance.data()[index] = time < m_cum_time.data()[index] ? distance_view.get(index) : m_cum_distance.data()[index];
+            m_cum_time.data()[index] = time < m_cum_time.data()[index] ? time : m_cum_time.data()[index];
         }
     }
 

@@ -439,8 +439,8 @@ namespace ridgesurface
         void castToLabels(uint16_t* labels);
         // void castToSeedLabels(unsigned short* labels);
         // void castToSpatialGraph(HxSpatialGraph* graph);
-        void castToTime(float* time);
-        void castToDistance(float* distance);
+        void castToTime(float* time) const;
+        void castToDistance(float* distance) const;
 
         // void computeColoringOfSphere(std::size_t i, std::unordered_map<futil::Face, std::size_t>& map);
         // void computeIntegralCurves(std::size_t i, std::unordered_set<int64_t>& first, std::unordered_set<int64_t>& second);
@@ -538,12 +538,12 @@ namespace ridgesurface
         fastmarching::FastMarching<fastmarching::ObserverDistance<MappingView>, progressbar::ProgressbarReportDynamic> m_fm;
 
         // Inner labeling which can be transformed to create an unsigned char labeling for generate surface
-        std::size_t* m_cum_label;
+        RawField<std::size_t> m_cum_label;
 
         // Input and Outputs
         RawField<float>* m_probability;
-        float* m_cum_time;
-        float* m_cum_distance;
+        RawField<float> m_cum_time;
+        RawField<float> m_cum_distance;
 
         // patched surface is the surface one works on (no merging of surface itself (delay merging of everything and instead calculate all fields anew?))
         surface::Surface m_patched_surface;

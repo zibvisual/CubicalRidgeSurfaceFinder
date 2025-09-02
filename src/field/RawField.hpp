@@ -105,6 +105,15 @@ public:
 
     using Location = FieldLocation;
 
+    RawField()
+    : m_data()
+    , m_lattice()
+    , m_dirty_vals(false)
+    , m_min_val(std::numeric_limits<T>::max())
+    , m_max_val(std::numeric_limits<T>::lowest())
+    , m_undefined_val(std::numeric_limits<T>::max())
+    {}
+
     RawField(Dims dims)
     : m_data(std::vector<T>(dims.size(), T()))
     , m_lattice(dims)
@@ -113,6 +122,7 @@ public:
     , m_max_val(std::numeric_limits<T>::lowest())
     , m_undefined_val(std::numeric_limits<T>::max())
     {
+        //TODO: instead of dirty vals we could just update m_min_val and m_max_val
     }
 
     /**
@@ -312,14 +322,21 @@ public:
      */
     std::optional<T> get(VecSize location) const
     {
-        if (m_lattice.dims().contains(location))
-        {
-            return get_unchecked(FieldLocation(location, m_lattice.dims()));
-        }
-        else
-        {
-            return std::optional<T>();
-        }
+        return m_lattice.dims().contains(location) ? get_unchecked(location) : std::optional<T>();
+    }
+
+    /**
+     * Returns underlying value or undefined value if out of bounds.
+     */
+    T get_or(VecSize location) const
+    {
+        return m_lattice.dims().contains(location) ? get_unchecked(location) : m_undefined_val;
+    }
+
+    T get_unchecked(VecSize location) const
+    {
+        const auto dims = m_lattice.dims();
+        return m_data[location.z() * dims.x() * dims.y() + location.y() * dims.x() + location.x()];
     }
 
     /**
@@ -327,14 +344,21 @@ public:
      */
     std::optional<T> get(VecInt location) const
     {
-        if (m_lattice.dims().contains(location))
-        {
-            return get_unchecked(FieldLocation(location, m_lattice.dims()));
-        }
-        else
-        {
-            return std::optional<T>();
-        }
+        return m_lattice.dims().contains(location) ? get_unchecked(location) : std::optional<T>();
+    }
+
+    /**
+     * Returns underlying value or undefined value if out of bounds.
+     */
+    T get_or(VecInt location) const
+    {
+        return m_lattice.dims().contains(location) ? get_unchecked(location) : m_undefined_val;
+    }
+
+    T get_unchecked(VecInt location) const
+    {
+        const auto dims = m_lattice.dims();
+        return m_data[static_cast<std::size_t>(location.z()) * dims.x() * dims.y() + static_cast<std::size_t>(location.y()) * dims.x() + static_cast<std::size_t>(location.x())];
     }
 
     /**
@@ -360,7 +384,7 @@ public:
 
     /** --------------------------------------------------------------------------- */
 
-    std::pair<T, T> getRange() const
+    std::pair<T, T> getRange()
     {
         if(m_dirty_vals){
             calculateRange();
@@ -377,6 +401,66 @@ public:
     dims() const
     {
         return m_lattice.dims();
+    }
+
+    /**
+     * Resize field and fill with undefined value if necessary
+     */
+    void resize(Dims dims) {
+        m_data.resize(dims.size(), m_undefined_val);
+        m_lattice.setDims(dims);        
+    }
+
+    void resize(Dims dims, T fillValue) {
+        if(fillValue == m_undefined_val){
+            return resize(dims);
+        }
+        // update min, max if necessary
+        if(!m_dirty_vals && m_data.size() < dims.size()){
+            if(fillValue < m_min_val){
+                m_min_val = fillValue;
+            }
+            if(m_max_val < fillValue){
+                m_max_val = fillValue;
+            }
+        }else if(!m_dirty_vals && dims.size() < m_data.size()){
+            m_dirty_vals = true;
+        }
+        m_data.resize(dims.size(), fillValue);
+        m_lattice.setDims(dims);
+    }
+
+    /**
+     * Set all values to undefined Value
+     */
+    void fill() {
+        m_min_val = std::numeric_limits<T>::max();
+        m_max_val = std::numeric_limits<T>::lowest();
+        m_dirty_vals = false;
+        for(std::size_t i = 0; i < m_data.size(); ++i){
+            m_data[i] = m_undefined_val;
+        }
+    }
+
+    void fill(T fillValue) {
+        if(fillValue == m_undefined_val){
+            return fill();
+        }
+        m_min_val = fillValue;
+        m_max_val = fillValue;
+        m_dirty_vals = false;
+        for(std::size_t i = 0; i < m_data.size(); ++i){
+            m_data[i] = m_undefined_val;
+        }
+    }
+
+    void setUndefinedValue(T undefinedValue) {
+        m_dirty_vals = true;
+        m_undefined_val = undefinedValue;
+    }
+
+    T getUndefinedValue(){
+        return m_undefined_val;
     }
 
     VecFloat getVoxelSize() const
@@ -401,6 +485,12 @@ public:
 
     T* data()
     {
+        m_dirty_vals = true;
+        return m_data.data();
+    }
+
+    const T* data() const
+    {
         return m_data.data();
     }
 
@@ -418,10 +508,10 @@ public:
     
 
 private:
-    void calculateRange() const
+    void calculateRange()
     {
-        m_min_val = std::numeric_limits<float>::max();
-        m_max_val = std::numeric_limits<float>::lowest();
+        m_min_val = std::numeric_limits<T>::max();
+        m_max_val = std::numeric_limits<T>::lowest();
         for(auto i = 0; i < m_data.size(); ++i){
             if(m_data[i] != m_undefined_val && m_data[i] < m_min_val){
                 m_min_val = m_data[i];

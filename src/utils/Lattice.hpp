@@ -18,6 +18,10 @@ public:
         return m_dims;
     }
 
+    void setDims(Dims dims) {
+        m_dims = dims;
+    }
+
     std::size_t size() const {
         return m_dims.size();
     }
