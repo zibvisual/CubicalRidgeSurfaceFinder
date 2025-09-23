@@ -77,7 +77,7 @@ public:
         return static_cast<VecSize>((gridPosition(worldPosition) + 0.5f).floor().max(0.0)).clamp(m_dims);
     }
 
-    // These are tempporary functions and should be chaned later on. Instead of std::size_t, FieldLocations should be created.
+    // These are temporary functions and should be chaned later on. Instead of std::size_t, FieldLocations should be created.
     std::size_t c_index(VecSize gridLocation) const {
         return gridLocation.z() * m_dims.x() * m_dims.y() + gridLocation.y() * m_dims.x() + gridLocation.x();
     }  

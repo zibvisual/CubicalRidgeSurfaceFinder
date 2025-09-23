@@ -333,6 +333,14 @@ public:
         return m_lattice.dims().contains(location) ? get_unchecked(location) : m_undefined_val;
     }
 
+    /**
+     * Returns underlying value or given value if out of bounds.
+     */
+    T get_or(VecSize location, const T value) const
+    {
+        return m_lattice.dims().contains(location) ? get_unchecked(location) : value;
+    }
+
     T get_unchecked(VecSize location) const
     {
         const auto dims = m_lattice.dims();
@@ -353,6 +361,14 @@ public:
     T get_or(VecInt location) const
     {
         return m_lattice.dims().contains(location) ? get_unchecked(location) : m_undefined_val;
+    }
+
+    /**
+     * Returns underlying value or undefined value if out of bounds.
+     */
+    T get_or(VecInt location, const T value) const
+    {
+        return m_lattice.dims().contains(location) ? get_unchecked(location) : value;
     }
 
     T get_unchecked(VecInt location) const

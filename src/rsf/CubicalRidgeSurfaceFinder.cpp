@@ -1005,9 +1005,9 @@ namespace ridgesurface
         m_graph.addEdge(seed, seed, false);
 
         auto face_cost = [this](Face face) {
-            auto cost = m_cum_time.data()[face.startId()];
-            auto endId = face.validEndId(m_lattice.dims());
-            return endId ? cost + m_cum_time.data()[endId.value()] : cost + cost;
+            const auto cost = m_cum_time.get_unchecked(face.startVoxel(m_lattice.dims()));
+            const auto cost2 = m_cum_time.get_or(face.endVoxel(m_lattice.dims()), cost);
+            return cost + cost2;
         };
 
         // get min face by time
@@ -1433,11 +1433,25 @@ namespace ridgesurface
         // Instead of going through all voxels inside-out, we use faces and go outside-in -> does it really make a difference?
 
         // PERF: we might want to use only the startId to reduce the number of calls to validEndId
+        // TODO: instead of time_view we want to make use of the same methods as in RawField -> we want to "get" from VecInt and VecSize....?
+        // TODO: this also means we need different HashMaps for different ids? maybe....
         auto face_cost = [&time_view, dims](Face face) {
-            auto cost = time_view.get(face.startId());
-            auto endId = face.validEndId(dims);
-            return endId ? cost + time_view.get(endId.value()) : cost + cost;
+            const auto cost1 = time_view.get(face.startId());
+            // TODO: time_view and other mappings should behave the same as RawField -> fit them together
+            // PERF: when using bit_index/BLocation instead of CLocation, we do not have to check "contain" as we have enough "wrapping" on the indices
+            // for now, to the steps manually
+            const auto loc = face.endVoxel(dims);
+            const auto cost2 = dims.contains(loc) ? time_view.get(static_cast<std::size_t>(loc.z()) * dims.x() * dims.y() + static_cast<std::size_t>(loc.y()) * dims.x() + static_cast<std::size_t>(loc.x())) : cost1;
+            return cost1 + cost2;
+            // auto endId = face.validEndId(dims);
+            // return endId ? cost + time_view.get(endId.value()) : cost + cost;
         };
+        // other face_cost method:
+        // auto face_cost = [this](Face face) {
+        //     const auto cost = m_cum_time.get_unchecked(face.startVoxel(m_lattice.dims()));
+        //     const auto cost2 = m_cum_time.get_or(face.endVoxel(m_lattice.dims()), cost);
+        //     return cost + cost2;
+        // };
         auto face_compare = [face_cost](Face left, Face right) {
             return face_cost(left) < face_cost(right);
         };
