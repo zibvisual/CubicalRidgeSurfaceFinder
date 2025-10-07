@@ -1,10 +1,10 @@
 /** Cubical Ridge Surface Finder (c) 2025 by Zuse Institute Berlin
  * 
  * Cubical Ridge Surface Finder is licensed under a
- * Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
+ * Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.
  * 
  * You should have received a copy of the license along with this
- * work.  If not, see <http://creativecommons.org/licenses/by-nc-sa/3.0/>.
+ * work.  If not, see <https://creativecommons.org/licenses/by-nc-sa/4.0/>.
  */
 
 #include <catch2/catch_test_macros.hpp>
