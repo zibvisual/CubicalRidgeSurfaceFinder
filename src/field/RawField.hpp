@@ -125,6 +125,17 @@ public:
         //TODO: instead of dirty vals we could just update m_min_val and m_max_val
     }
 
+    RawField(Lattice lattice)
+    : m_data(std::vector<T>(lattice.dims().size(), T()))
+    , m_lattice(lattice)
+    , m_dirty_vals(true)
+    , m_min_val(std::numeric_limits<T>::max())
+    , m_max_val(std::numeric_limits<T>::lowest())
+    , m_undefined_val(std::numeric_limits<T>::max())
+    {
+        //TODO: instead of dirty vals we could just update m_min_val and m_max_val
+    }
+
     /**
      * data must be contiguous with x being the fastest iteration
      */

@@ -1,3 +1,12 @@
+/** Cubical Ridge Surface Finder (c) 2025 by Zuse Institute Berlin
+ * 
+ * Cubical Ridge Surface Finder is licensed under a
+ * Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
+ * 
+ * You should have received a copy of the license along with this
+ * work.  If not, see <http://creativecommons.org/licenses/by-nc-sa/3.0/>.
+ */
+
 #include <iostream>
 #include "Config.h"
 #include "src/utils/ProgressbarReportHelper.hpp"

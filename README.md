@@ -6,6 +6,12 @@ This repositrory contains the source code used to calculate a cubibal ridge surf
 
 To compile, one should use cmake with features of c++23 or newer.
 
+From the root of the project:
+```
+cmake -S . -B build/ -D CMAKE_BUILD_TYPE=Release
+cmake --build build/
+```
+
 ## Folder and File Structure
 
 - src: contains the source code library
