@@ -1,0 +1,22 @@
+# This is one specific triangulation of the unit cube. How the cube gets triangulated is not important
+v 0 0 0
+v 1 0 0
+v 0 0 1
+v 1 0 1
+v 0 1 0
+v 1 1 0
+v 0 1 1
+v 1 1 1
+f 1 2 4
+f 1 4 3
+f 1 5 2
+f 6 2 5
+f 2 6 4
+f 8 4 6
+f 1 7 5
+f 1 3 7
+f 4 8 3
+f 7 3 8
+f 5 7 6
+f 8 6 7
+
