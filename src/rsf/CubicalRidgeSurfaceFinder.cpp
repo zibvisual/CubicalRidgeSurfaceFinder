@@ -1410,8 +1410,13 @@ namespace ridgesurface
         };
         auto flooding = klenert::Flooding<Face, decltype(flood_connection), 4, decltype(flood_compare)>(flood_connection, flood_compare);
         // flooding.flood({ firstFace, secondFace }, { (i << 1) + 1, (i << 1) + 2 }); // If we want to use this, we would need m_label to be bigger than unsigned char
-        std::vector<Face> flooding_startpoints = {firstFace, secondFace};
-        flooding.flood(flooding_startpoints);
+        // std::vector<Face> flooding_startpoints = {firstFace, secondFace};
+        // flooding.flood(flooding_startpoints);
+        if(flooding.streamflood({ firstFace, secondFace }))
+        {
+            // TODO: make this error more formal (not just an std::cout output)
+            std::cout << "could not generate patch " << i << " , as both poles contain the same locale minima" << std::endl;
+        }
 
         auto& mapping = flooding.regions();
 

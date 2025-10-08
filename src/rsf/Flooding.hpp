@@ -247,10 +247,72 @@ namespace klenert
     {
     public:
         Flooding(Connectivity connection, Compare compare)
-            : m_heap(compare)
+            : m_connection(connection)
+            , m_compare(compare)
+            , m_heap(compare)
             , m_colors()
-            , m_connection(connection)
         {}
+
+        /**
+         * Flood from local minimas of the startpoints. 
+         * If startpoints with different labelings share the same locale minima, we return true (can be seen as an error).
+         */
+        bool streamflood(std::vector<T> startPoints, std::vector<std::size_t> labeling)
+        {
+            m_heap.clear();
+            m_colors.clear();
+
+            T node;
+            T neighbors[MaxNeighbors];
+            std::size_t counter = 0;
+
+            // we first need to stream down to local minima
+            for (std::size_t i = 0; i < startPoints.size(); ++i)
+            {
+                node = startPoints[i];
+                // m_colors[node] = labeling[i];
+                for(;;){
+                    // check if we at minima
+                    T minima = node;
+                    counter = m_connection(node, &neighbors[0]);
+                    for (std::size_t i = 0; i < counter; ++i)
+                    {
+                        T neighbor = neighbors[i];
+                        if(m_compare(minima, neighbor)){
+                            minima = neighbor;
+                        }
+                    }
+                    if(minima == node){
+                        break;
+                    }else{
+                        // we found a node to stream down
+                        node = minima;
+                    }
+                }
+
+                // add locale minima to heap
+                if(m_colors.find(node) != m_colors.end()){
+                    return true;
+                }else{
+                    m_heap.push(node);
+                    m_colors[node] = labeling[i];
+                }
+            }
+
+            inner_flood();
+            return false;
+        }
+
+        bool streamflood(std::vector<T> startPoints)
+        {
+            auto numbers = std::vector<std::size_t>();
+            numbers.reserve(startPoints.size());
+            for (std::size_t i = 1; i <= startPoints.size(); ++i)
+            {
+                numbers.push_back(i);
+            }
+            return streamflood(startPoints, numbers);
+        }
 
         void flood(std::vector<T> startPoints, std::vector<std::size_t> labeling)
         {
@@ -263,6 +325,39 @@ namespace klenert
                 m_heap.push(startPoint);
                 m_colors[startPoint] = labeling[i];
             }
+
+            inner_flood();
+        }
+
+        void flood(std::vector<T> startPoints)
+        {
+            m_heap.clear();
+            m_colors.clear();
+
+            for (std::size_t i = 0; i < startPoints.size(); ++i)
+            {
+                auto startPoint = startPoints[i];
+                m_heap.push(startPoint);
+                m_colors[startPoint] = i;
+            }
+
+            inner_flood();
+        }
+
+        const std::unordered_map<T, std::size_t>& regions() const
+        {
+            return m_colors;
+        }
+
+        void clear()
+        {
+            m_heap.clear();
+            m_colors.clear();
+        }
+
+    protected:
+        void inner_flood()
+        {
             T node;
             T neighbors[MaxNeighbors];
             std::size_t counter = 0;
@@ -285,35 +380,11 @@ namespace klenert
             }
         }
 
-        void flood(std::vector<T> startPoints)
-        {
-            auto numbers = std::vector<std::size_t>();
-            numbers.reserve(startPoints.size());
-            for (std::size_t i = 1; i <= startPoints.size(); ++i)
-            {
-                numbers.push_back(i);
-            }
-            flood(startPoints, numbers);
-        }
-
-        const std::unordered_map<T, std::size_t>& regions() const
-        {
-            return m_colors;
-        }
-
-        void clear()
-        {
-            m_heap.clear();
-            m_colors.clear();
-        }
-
-    protected:
+        Connectivity m_connection;
+        Compare m_compare;
         typedef boost::heap::priority_queue<T, boost::heap::compare<Compare> > heap_type;
         heap_type m_heap;
-
         std::unordered_map<T, std::size_t> m_colors;
-
-        Connectivity m_connection;
     };
 
 } // namespace klenert
