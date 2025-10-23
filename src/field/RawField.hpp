@@ -358,6 +358,21 @@ public:
         return m_data[location.z() * dims.x() * dims.y() + location.y() * dims.x() + location.x()];
     }
 
+    bool set(VecSize location, const T value)
+    {
+        if(m_lattice.dims().contains(location)){
+            set_unchecked(location, value);
+            return true;
+        }
+        return false;
+    }
+
+    void set_unchecked(VecSize location, const T value)
+    {
+        const auto dims = m_lattice.dims();
+        m_data[location.z() * dims.x() * dims.y() + location.y() * dims.x() + location.x()] = value;
+    }
+
     /**
      * Returns underlying value or None if out of bounds.
      */
