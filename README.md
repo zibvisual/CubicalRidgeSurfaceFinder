@@ -12,6 +12,26 @@ cmake -S . -B build/ -D CMAKE_BUILD_TYPE=Release
 cmake --build build/
 ```
 
+## Usage
+
+TODO
+
+### Input Files
+
+A scalar field as a numpy file and a list of seedpoints (3D points) are necessary.
+The seedpoints are either:
+- in wavefront format (only the vertices are read)
+- labels in a numpy file (all labels >0 are seen as seedpoints)
+- lines of 3D points (see [examples](data/examples/smelt-petal_seeds.obj))
+
+## Examples
+
+Example fields and surfaces can be generated with the built `examples` executable.
+Images show the Smelt Petal and the Monkey Saddle example with the original output, a smoothed version and the smooth surface overlayed with the volume rendering of the scalar field.
+
+![Smelt Petal Ridge Surface Output](docs/images/smelt-petal_overview.png)
+![Monkey Saddle Ridge Surface Output](docs/images/monkey-saddle_overview.png)
+
 ## Folder and File Structure
 
 - src: contains the source code library
