@@ -6,10 +6,10 @@
 #include <filesystem>
 #include <ios>
 
-inline std::ifstream filename_to_ifstream(const std::string &filename, const std::string &extension){
+inline std::ifstream filename_to_ifstream(const std::string &filename, const std::string &extension, const bool replace_extension = false){
     // allow relative image paths
     auto input = std::filesystem::current_path() / filename;
-    if (!input.has_extension())
+    if (!input.has_extension() || replace_extension)
     {
         input = input.replace_extension(extension);
     }
@@ -21,10 +21,10 @@ inline std::ifstream filename_to_ifstream(const std::string &filename, const std
     return stream;
 }
 
-inline std::ofstream filename_to_ofstream(const std::string &filename, const std::string &extension){
+inline std::ofstream filename_to_ofstream(const std::string &filename, const std::string &extension, const bool replace_extension = false){
     // allow relative image paths
     auto output = std::filesystem::current_path() / filename;
-    if (!output.has_extension())
+    if (!output.has_extension() || replace_extension)
     {
         output = output.replace_extension(extension);
     }

@@ -190,7 +190,7 @@ public:
 
         Lattice lattice = Lattice(dims);
         try {
-            metadata_t metadata = read_metadata(input_path);
+            metadata_t metadata = read_metadata(input_path, true);
             // std::cout << metadata << std::endl;
             lattice = SpatialInformation::fromMetadata(metadata).toLattice(dims);
         }
