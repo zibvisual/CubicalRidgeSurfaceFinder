@@ -14,7 +14,13 @@ cmake --build build/
 
 ## Usage
 
-TODO
+```
+build/tests
+build/examples monkey-saddle
+build/rsf [numpy-input-path] [seedpoints-input-path] [flags]
+```
+
+See `build/rsf --help` for more information on flags. 
 
 ### Input Files
 
@@ -23,6 +29,8 @@ The seedpoints are either:
 - in wavefront format (only the vertices are read)
 - labels in a numpy file (all labels >0 are seen as seedpoints)
 - lines of 3D points (see [examples](data/examples/smelt-petal_seeds.obj))
+
+As numpy files do not contains spatial information of a scalar field, they may be added either in the console (see `--help`) or via a metadata txt file with the same name as the numpy file. See [Metadata README](docs/README_Metadata.md) for more information.
 
 ## Examples
 
