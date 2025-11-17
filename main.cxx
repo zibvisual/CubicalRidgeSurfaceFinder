@@ -176,7 +176,7 @@ int main(int argc, char *argv[])
         std::cout << "Loaded " << seeds.size() << " seeds" << std::endl;
         std::cout << "Cost intensity range for marching set to [" << min << ", " << max << "]" << std::endl;
 
-        auto progressbar = progressbar::ProgressbarReportDynamic(progressbar::ProgressbarReportLevel::FullReport);
+        auto progressbar = progressbar::Progressbar(progressbar::ProgressbarReportLevel::FullReport);
         ridgesurface::CubicalRidgeSurfaceFinder m_finder(progressbar);
         m_finder.setInput(&img);
         m_finder.newSeeds(seeds);

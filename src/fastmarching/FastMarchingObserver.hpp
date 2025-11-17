@@ -124,7 +124,7 @@ namespace fastmarching
         float m_max_distance = 0.0f;
         std::size_t m_number_of_targets = 0;
 
-        template <class O, class R>
+        template <class O>
         friend class FastMarching;
     };
 
@@ -183,7 +183,7 @@ namespace fastmarching
         Set m_targets;
         std::size_t m_number_of_targets = 0;
 
-        template <class O, class R>
+        template <class O>
         friend class FastMarching;
     };
 
@@ -256,7 +256,7 @@ namespace fastmarching
         float m_until_distance = FLT_MAX;
         float m_max_distance = 0.0f;
 
-        template <class O, class R>
+        template <class O>
         friend class FastMarching;
     };
 

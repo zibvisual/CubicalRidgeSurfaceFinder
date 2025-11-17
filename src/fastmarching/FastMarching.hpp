@@ -41,13 +41,13 @@ namespace fastmarching
      * - set observer conditions (e.g. observer().setTarget())
      * - march
      */
-    template <class Observer = ObserverAll<mutil::HashMapMappingView<BigHashMap<uint64_t, float>>, SmallHashSet<uint64_t>>, class ProgressbarReport = progressbar::ProgressbarReportNone>
+    template <class Observer = ObserverAll<mutil::HashMapMappingView<BigHashMap<uint64_t, float>>, SmallHashSet<uint64_t>>>
     class FastMarching
     {
     public:
         using MappingView = typename Observer::MappingView;
 
-        FastMarching(ProgressbarReport& report)
+        FastMarching(progressbar::Progressbar& report)
             : m_min_threshold(std::numeric_limits<float>::lowest()), m_max_threshold(std::numeric_limits<float>::max()), m_handles(), m_heap(), m_potential(nullptr), m_max_time(0.0f), m_counter(0), m_report(report)
         {
         }
@@ -667,7 +667,7 @@ namespace fastmarching
         std::size_t m_counter;
 
         // Progressbar Report
-        ProgressbarReport& m_report;
+        progressbar::Progressbar& m_report;
     };
 
 } // namespace fastmarching

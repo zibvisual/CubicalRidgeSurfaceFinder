@@ -4,6 +4,7 @@
 #include <iostream>
 #include <chrono>
 #include <vector>
+#include <array>
 
 namespace progressbar
 {
@@ -80,123 +81,208 @@ namespace progressbar
         std::cout << " finished! [" << (std::chrono::duration_cast<std::chrono::microseconds>(time).count() / 1000000.0) << " sec]" << std::endl;
     }
 
-    // clang-format off
-    struct ProgressbarReportNone {
-        void start(const std::string& str){/* noop */}
-        void end(){/* noop */}
-        bool stop(){return false;}
-        void update(float){/* noop */}
-        void update(const std::string& str){/* noop */}
-    };
-
-    struct ProgressbarReportBusy {
-        void start(const std::string& str){
-            m_progress = str;
-            display(m_progress, "");
-        }
-        void end(){
-            erase_lines();
-            display_finish(m_progress);
-        }
-        bool stop(){return false;}
-        void update(float){/* noop */}
-        void update(const std::string& str){
-            erase_lines();
-            display(m_progress, str);
-        }
-
-        private:
-        std::string m_progress;
-    };
-
-    struct ProgressbarReportFull {
-        void start(const std::string& str){
-            m_progress = str;
-            m_info = "";
-            m_value = 0.0f;
-            display(m_progress, m_value, m_info);
-            m_begin = std::chrono::steady_clock::now();
-        }
-        void end(){
-            erase_lines();
-            display_finish(m_progress, std::chrono::steady_clock::now() - m_begin);
-        }
-        bool stop(){return false;}
-        void update(float progress){
-            m_value = progress;
-            erase_lines();
-            display(m_progress, m_value, m_info);
-        }
-        void update(const std::string& str){
-            m_info = str;
-            erase_lines();
-            display(m_progress, m_value, m_info);
-        }
-
-        private:
-        std::string m_progress;
-        std::string m_info;
-        float m_value;
-        std::chrono::steady_clock::time_point m_begin;
-    };
-
-    // clang-format on
-
     enum ProgressbarReportLevel {
+        // Do not report anything
         NoReport,
+        // Only report finished process
+        TimeReport,
+        // Report current step
         BusyReport,
+        // Report current step and progress
         FullReport
     };
 
-    struct SimpleProgressbarReportDynamic {
-        SimpleProgressbarReportDynamic():reportLevel(ProgressbarReportLevel::BusyReport){}
-        SimpleProgressbarReportDynamic(ProgressbarReportLevel level):reportLevel(level){}
+    struct ProgressValue {
+        // how big the target value is (conversion factor to parent task)
+        float target;
+        // current value (ignoring subtasks)
+        float current;
+        // buffer to read (overall progress, including subtasks)
+        float overall;
+    };
+
+    /**
+     * A progressbar helper. API is simple. If subtasks are wanted, subtask() should be called before delegating.
+     */
+    struct Progressbar {
+        Progressbar():m_reportlevel(ProgressbarReportLevel::FullReport){}
+        Progressbar(ProgressbarReportLevel level):m_reportlevel(level){}
 
         void start(const std::string& str){
-            m_progress = str;
-            m_info = "";
-            m_value = 0.0f;
-            if (reportLevel == ProgressbarReportLevel::BusyReport) display(m_progress, m_value, m_info);
-            else if (reportLevel == ProgressbarReportLevel::FullReport) display(m_progress, m_value, m_info);
-            if(timer){
+            ++m_processlevel;
+            if(m_tasklevel != m_processlevel - 1){
+                return;
+            }
+
+            // check if we already got a name
+            if(m_names[m_tasklevel].empty()){
+                m_names[m_tasklevel] = str;
+            }
+            if(m_tasklevel == 0){
+                m_values[m_tasklevel].target = 1.0f;
                 m_begin = std::chrono::steady_clock::now();
             }
+            m_values[m_tasklevel].current = 0.0f;
+            m_infos[m_tasklevel] = "";
+
+            report();
         }
         void end(){
-            if (reportLevel != ProgressbarReportLevel::NoReport) {
-                erase_lines();
-                if (timer){
-                    display_finish(m_progress, std::chrono::steady_clock::now() - m_begin);
-                }else{
-                    display_finish(m_progress);
-                }
+            if(m_processlevel == 0)
+            {
+                // we cannot end something which did not start
+                return;
             }
+            --m_processlevel;
+            if(m_tasklevel != m_processlevel){
+                return;
+            }
+
+            // whole task finished?
+            if(m_tasklevel == 0){
+                finish_report();
+            }
+
+            // delete old info and name
+            m_names[m_tasklevel] = "";
+            m_infos[m_tasklevel] = "";
+
+            if(m_tasklevel == 0){
+                return;
+            }
+            --m_tasklevel;
+            m_values[m_tasklevel].current += m_values[m_tasklevel + 1].target;
+            report();
         }
         bool stop(){
             return false;
         }
-        void update(float progress){
-            m_value = progress;
-            if (reportLevel == ProgressbarReportLevel::FullReport){
-                erase_lines();
-                display(m_progress, m_value, m_info);
+        bool stop_and_end(){
+            bool stopped = stop();
+            if(stopped){
+                end();
             }
+            return stopped;
+        }
+
+        void update(float progress){
+            if(m_tasklevel != m_processlevel - 1){
+                return;
+            }
+
+            m_values[m_tasklevel].current = progress;
+            report();
         }
         void update(const std::string& str){
-            m_info = str;
-            if (reportLevel == ProgressbarReportLevel::BusyReport){
-                erase_lines();
-                display(m_progress, m_value, m_info);
+            if(m_tasklevel != m_processlevel - 1){
+                return;
+            }
+
+            m_infos[m_tasklevel] = str;
+            report();
+        }
+
+        /**
+         * Create a subtask.
+         */
+        void subtask(float completion){
+            // no deep subtasks
+            if(m_maxtasks > m_tasklevel + 1){
+                return;
+            }
+            ++m_tasklevel;
+            m_values[m_tasklevel].target = completion;
+        }
+
+        /**
+         * Create a subtask with custom name
+         */
+        void subtask(const std::string& str, float completion){
+            // no deep subtasks
+            if(m_maxtasks > m_tasklevel + 1){
+                return;
+            }
+            ++m_tasklevel;
+            m_names[m_tasklevel] = str;
+            m_values[m_tasklevel].target = completion;
+        }
+
+        // level does not need to be changed at runtime
+        // void level(ProgressbarReportLevel reportLevel){
+        //     m_reportlevel = reportLevel;
+        // }
+        
+        private:
+        /**
+         * Reporting is done here (we delete all lines and recreate them)
+         */
+        void report(){
+            // debounce (1s)
+            if(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - m_begin).count() < 1000){
+                return;
+            }
+
+            // update overall values (if necessary)
+            if(m_reportlevel == ProgressbarReportLevel::FullReport)
+            {
+                m_values[m_tasklevel].overall = m_values[m_tasklevel].current;
+                for(uint8_t i = 1; i <= m_tasklevel; ++i){
+                    uint8_t j = m_tasklevel - i;
+                    m_values[j].overall = m_values[j].current + m_values[j+1].target * m_values[j+1].overall;
+                }
+            }
+
+            // report progress update
+            erase_lines(m_drawnlines);
+
+            switch (m_reportlevel)
+            {
+            case ProgressbarReportLevel::NoReport:
+            case ProgressbarReportLevel::TimeReport:
+                m_drawnlines = 0;
+            case ProgressbarReportLevel::BusyReport:
+                for(uint8_t i = 0; i <= m_tasklevel; ++i){
+                    display(m_names[i], m_infos[i]);
+                }
+                m_drawnlines = m_tasklevel + 1;
+                break;
+            case ProgressbarReportLevel::FullReport:
+            default:
+                for(uint8_t i = 0; i <= m_tasklevel; ++i){
+                    display(m_names[i], m_values[i].overall, m_infos[i]);
+                }
+                m_drawnlines = m_tasklevel + 1;
+                break;
             }
         }
 
-        ProgressbarReportLevel reportLevel;
-        bool timer = true;
+        void finish_report()
+        {
+            erase_lines(m_drawnlines);
+            if(m_reportlevel != ProgressbarReportLevel::NoReport){
+                display_finish(m_names[m_tasklevel], std::chrono::steady_clock::now() - m_begin);
+            }
+        }
+
 
         private:
-        std::string m_progress;
-        std::string m_info;
-        float m_value;
+        // How much information should be displayed
+        ProgressbarReportLevel m_reportlevel;
+        // current stack index
+        std::uint8_t m_tasklevel = 0;
+        // current level (count of start-end pairs)
+        std::uint8_t m_processlevel = 0;
+        // number of lines drawn
+        std::uint8_t m_drawnlines = 0;
+        // max (sub)tasks
+        std::uint8_t m_maxtasks = 5;
+        // stack of process/stage names
+        std::array<std::string, 5> m_names;
+        // further information for each process/stage
+        std::array<std::string, 5> m_infos;
+        // values for each process/stage
+        std::array<ProgressValue, 5> m_values;
+        // time when the main task was started
         std::chrono::steady_clock::time_point m_begin;
     };
 

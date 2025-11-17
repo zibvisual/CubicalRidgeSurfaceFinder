@@ -129,7 +129,7 @@ int main(int argc, char *argv[])
         const auto min = 0.0f;
         const auto max = 1.5f;
 
-        auto progressbar = progressbar::ProgressbarReportDynamic(progressbar::ProgressbarReportLevel::FullReport);
+        auto progressbar = progressbar::Progressbar(progressbar::ProgressbarReportLevel::FullReport);
         ridgesurface::CubicalRidgeSurfaceFinder m_finder(progressbar);
         m_finder.setInput(&img);
         m_finder.newSeeds(seeds);

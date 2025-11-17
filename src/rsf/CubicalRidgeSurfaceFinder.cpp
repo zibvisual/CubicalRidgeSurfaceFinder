@@ -73,7 +73,7 @@ namespace ridgesurface
         return SeedIterator(*this, lattice);
     }
 
-    CubicalRidgeSurfaceFinder::CubicalRidgeSurfaceFinder(progressbar::ProgressbarReportDynamic& progress)
+    CubicalRidgeSurfaceFinder::CubicalRidgeSurfaceFinder(progressbar::Progressbar& progress)
         : m_progressbar(progress)
         , m_seeds()
         , m_seeds_change()
@@ -597,6 +597,8 @@ namespace ridgesurface
     int
     CubicalRidgeSurfaceFinder::update()
     {
+        m_progressbar.start("Extract Cubical Ridge Surface Patches");
+
         // we assume m_seeds and m_seeds_change to be in sync
         // fields which must be updated accordingly:
         // - m_graph
@@ -608,19 +610,65 @@ namespace ridgesurface
         // resize data structures
         updateReserve();
 
-        // remove old patches on surface
+        // count the values
+        std::size_t remove_counter = 0;
+        std::size_t replace_counter = 0;
+        std::size_t insert_counter = 0;
+        for (std::size_t i = 0; i < m_seeds_change.pastSize(); ++i)
+        {
+            remove_counter += static_cast<std::size_t>(m_seeds_change.wasDeleted(i));
+            replace_counter += static_cast<std::size_t>(m_seeds_change.willBeRenamed(i));
+        }
+        for (std::size_t i = 0; i < m_seeds_change.futureSize(); ++i)
+        {
+            insert_counter += static_cast<std::size_t>(m_seeds_change.willBeAdded(i));
+        }
+
+        // magic number multiplier (we assume adding patches takes x times longer than deleting)
+        const float insert_mult = 10.0f;
+        const float target = remove_counter + replace_counter + insert_counter * insert_mult;
+
+        updateClearTask(remove_counter, remove_counter / target);
+        if (m_progressbar.stop_and_end()) return 0;
+        updateReplaceTask(replace_counter, replace_counter / target);
+        if (m_progressbar.stop_and_end()) return 0;
+        updateInsertTask(insert_counter, insert_counter * insert_mult / target);
+
+        // delete uneccesary space at the end (not done in m_graph for now)
+        m_seeds_voxels.resize(m_seeds_change.futureSize());
+        m_seedpoints_candidates.resize(m_seeds_change.futureSize());
+
+        update_patch_orientations();
+
+        m_seeds_change.next();
+        m_progressbar.end();
+        return 1;
+    }
+
+    void 
+    CubicalRidgeSurfaceFinder::updateClearTask(std::size_t n, float progress){
+        std::size_t counter = 0;
+        m_progressbar.subtask(progress);
         m_progressbar.start("Remove Patches");
         for (std::size_t i = 0; i < m_seeds_change.pastSize(); ++i)
         {
             if (m_seeds_change.wasDeleted(i))
             {
+                if (m_progressbar.stop_and_end()) return;
                 updateClear(i);
+                m_progressbar.update(++counter/static_cast<float>(n));
+                m_progressbar.update(fmt::format("Removing Patches ({:d} / {:d})", counter, n));
             }
         }
         m_patched_surface.removeObsoleteTriangles();
         m_patched_surface.removeUnusedPoints();
         m_progressbar.end();
+    }
 
+    void 
+    CubicalRidgeSurfaceFinder::updateReplaceTask(std::size_t n, float progress){
+        std::size_t counter = 0;
+        m_progressbar.subtask(progress);
         m_progressbar.start("Replace Patches");
         // now reorder, without overwriting an id before renaming it itself (go to the end of the graph paths) -> this could be done by an iterator
         for (std::size_t i = 0; i < m_seeds_change.pastSize(); ++i)
@@ -635,33 +683,32 @@ namespace ridgesurface
             {
                 auto old_id = m_seeds_change.renamedFromUnsafe(id);
                 updateReplace(id, old_id);
+                m_progressbar.update(++counter/static_cast<float>(n));
+                m_progressbar.update(fmt::format("Replacing Patches ({:d} / {:d})", counter, n));
                 // update graph (necessary such that we do not replace mutliple times)
                 m_seeds_change.replace(id, old_id);
                 id = old_id;
             }
         }
         m_progressbar.end();
+    }
 
+    void 
+    CubicalRidgeSurfaceFinder::updateInsertTask(std::size_t n, float progress){
+        m_progressbar.subtask(progress);
         m_progressbar.start("Calculating Patches");
         std::size_t counter = 0;
         for (std::size_t i = 0; i < m_seeds_change.futureSize(); ++i)
         {
             if (m_seeds_change.willBeAdded(i))
             {
+                if (m_progressbar.stop_and_end()) return;
                 updateInsert(i);
-                m_progressbar.update(fmt::format("Calculating Patches ({:d} / ?)",++counter));
+                m_progressbar.update(++counter/static_cast<float>(n));
+                m_progressbar.update(fmt::format("Calculating Patches ({:d} / {:d})", counter, n));
             }
         }
         m_progressbar.end();
-
-        // delete uneccesary space at the end (not done in m_graph for now)
-        m_seeds_voxels.resize(m_seeds_change.futureSize());
-        m_seedpoints_candidates.resize(m_seeds_change.futureSize());
-
-        update_patch_orientations();
-
-        m_seeds_change.next();
-        return 1;
     }
 
     void
@@ -782,7 +829,7 @@ namespace ridgesurface
         resetFields();
         updateReserve();
 
-        m_progressbar.start("Calculating Patches");
+        m_progressbar.start("Extracting Ridge Surface Patches");
         for (std::size_t i = 0; i < m_seeds.size(); ++i)
         {
             updateInsert(i);
@@ -1238,7 +1285,6 @@ namespace ridgesurface
     void
     CubicalRidgeSurfaceFinder::grow(std::size_t i)
     {
-        // std::chrono::steady_clock::time_point begin_grow = std::chrono::steady_clock::now();
         Seed seed = m_seeds[i];
         auto dims = m_lattice.dims();
         auto voxelSize = m_probability->lattice().voxelsize();
@@ -1257,12 +1303,7 @@ namespace ridgesurface
         auto iter = seed.getVoxelSources(m_lattice);
         m_fm.setStartVoxels(iter.begin(), iter.end());
         m_fm.maxDistance(seed.getDistance());
-        // std::cout << "start march" << std::endl;
-        // std::chrono::steady_clock::time_point begin_march = std::chrono::steady_clock::now();
         m_fm.march();
-        // std::chrono::steady_clock::time_point end_march = std::chrono::steady_clock::now();
-        // std::cout << "march took " << (std::chrono::duration_cast<std::chrono::microseconds>(end_march - begin_march).count()) / 1000000.0 << " seconds." << std::endl;
-        // std::cout << "march finished" << std::endl;
 
         const auto& time_view = m_fm.time();
         const auto& distance_view = m_fm.distance();

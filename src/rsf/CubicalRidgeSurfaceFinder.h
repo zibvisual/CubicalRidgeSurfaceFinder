@@ -369,7 +369,7 @@ namespace ridgesurface
     class CubicalRidgeSurfaceFinder
     {
     public:
-        CubicalRidgeSurfaceFinder(progressbar::ProgressbarReportDynamic& progress);
+        CubicalRidgeSurfaceFinder(progressbar::Progressbar& progress);
         ~CubicalRidgeSurfaceFinder(void);
 
         void setInput(RawField<float>* probability);
@@ -489,13 +489,16 @@ namespace ridgesurface
          */
         void updateReserve();
         void updateInsert(std::size_t i);
+        void updateInsertTask(std::size_t n, float progress);
         /**
          * @brief After clearing all necessary patches, one must call removeObsoleteTriangles on the surface. (To also clear triangles)
          *
          * @param i
          */
         void updateClear(std::size_t i);
+        void updateClearTask(std::size_t n, float progress);
         void updateReplace(std::size_t left, std::size_t right);
+        void updateReplaceTask(std::size_t n, float progress);
 
         void addPatch(std::size_t i);
 
@@ -510,7 +513,7 @@ namespace ridgesurface
         bool faceBetweenVoxels(std::size_t i, std::size_t j) const;
 
         // progressbar
-        progressbar::ProgressbarReportDynamic& m_progressbar;
+        progressbar::Progressbar& m_progressbar;
 
         // Seeds
         std::vector<Seed> m_seeds;
@@ -535,7 +538,7 @@ namespace ridgesurface
 
         // Fast Marching object
         using MappingView = mutil::HashMapMappingView<SmallHashMap<int64_t, float>>;
-        fastmarching::FastMarching<fastmarching::ObserverDistance<MappingView>, progressbar::ProgressbarReportDynamic> m_fm;
+        fastmarching::FastMarching<fastmarching::ObserverDistance<MappingView>> m_fm;
 
         // Inner labeling which can be transformed to create an unsigned char labeling for generate surface
         RawField<std::size_t> m_cum_label;

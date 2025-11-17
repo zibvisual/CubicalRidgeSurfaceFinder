@@ -122,7 +122,7 @@ TEST_CASE("Fast Marching Utilities", "[fm]")
 
 TEST_CASE("Fast Marching", "[fm]")
 {
-    progressbar::ProgressbarReportNone progress;
+    progressbar::Progressbar progress(progressbar::NoReport);
 
     SECTION("Probobilistic field"){
         // load images
@@ -132,7 +132,7 @@ TEST_CASE("Fast Marching", "[fm]")
         // create fm with two RawFields, and use ArrayMappingView (pointer) for now...
         auto time_view = mutil::ArrayMappingView<uint64_t,float>(time.data(), time.getDims().size());
         auto dist_view = mutil::ArrayMappingView<uint64_t,float>(dist.data(), dist.getDims().size());
-        fastmarching::FastMarching<fastmarching::ObserverAll<mutil::ArrayMappingView<uint64_t, float>, BigHashSet<uint64_t>>, progressbar::ProgressbarReportNone> fm(progress);
+        fastmarching::FastMarching<fastmarching::ObserverAll<mutil::ArrayMappingView<uint64_t, float>, BigHashSet<uint64_t>>> fm(progress);
         // start fm from the top left (0,0,0)
         fm.data(&pot, time_view, dist_view);
         fm.thresholds(0.0f,1.0f);
@@ -158,7 +158,7 @@ TEST_CASE("Fast Marching", "[fm]")
         auto pot = RawField<float>::load(__DATAPATH__+"/surfaces/simple_ridge");
         // using MappingView = mutil::HashMapMappingView<SmallHashMap<int64_t, float>>;
         // fastmarching::FastMarching<fastmarching::ObserverDistance<MappingView>> m_fm;
-        fastmarching::FastMarching<fastmarching::ObserverDistance<mutil::HashMapMappingView<SmallHashMap<int64_t, float>>>, progressbar::ProgressbarReportNone> fm(progress);
+        fastmarching::FastMarching<fastmarching::ObserverDistance<mutil::HashMapMappingView<SmallHashMap<int64_t, float>>>> fm(progress);
         fm.data(&pot);
         fm.thresholds(0.5f,1.5f);
         fm.setStartPoint(VecFloat(5.f));
@@ -346,11 +346,10 @@ TEST_CASE("Face to Surface", "[face]")
 
 TEST_CASE("Ridge Surface Finder", "[rsf]")
 {
-    auto progressbar = progressbar::ProgressbarReportDynamic();
+    auto progressbar = progressbar::Progressbar(progressbar::NoReport);
     ridgesurface::CubicalRidgeSurfaceFinder m_finder(progressbar);
 
     SECTION("plane surface"){
-        progressbar.level(progressbar::NoReport);
         auto img = RawField<float>::load(__DATAPATH__+"/surfaces/simple_ridge");
         REQUIRE(img.dims() == Dims(10));
         REQUIRE(img.getCornerBoundingBox() == CornerBBox::fromCenterBBox(VecFloat(0.f), VecFloat(9.f), img.dims()));
