@@ -43,6 +43,10 @@ add_subdirectory(includes/catch2)
 target_link_libraries(tests PUBLIC rsflib)
 target_link_libraries(tests PRIVATE Catch2::Catch2WithMain)
 
+# create C API
+add_library(rsfapi SHARED api.cpp)
+target_link_libraries(rsfapi PUBLIC rsflib)
+
 # copy test data
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/data
     DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
