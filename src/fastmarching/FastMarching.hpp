@@ -1,14 +1,5 @@
 #pragma once
 
-// #include <mclib/McDim3l.h>
-// #include <hxfield/RawField.h>
-
-// #include <unordered_map>
-// #include <vector>
-
-// #include <mutil/List.hpp>
-// #include <mutil/Mapping.hpp>
-
 #include <fastmarching/FastMarchingUtilities.hpp>
 #include <fastmarching/FastMarchingObserver.hpp>
 #include <utils/ProgressbarReportHelper.hpp>
@@ -16,10 +7,6 @@
 #include <utils/HashMap.hpp>
 #include <utils/Utils.hpp>
 #include <field/RawField.hpp>
-
-
-// #include <hxfastmarching/private/helpers/ProgressbarReportHelper.h>
-// #include <hxfastmarching/private/helpers/FastMarchingObserver.h>
 
 // // TODO: test which heap data structure is fastest
 #include <boost/heap/fibonacci_heap.hpp>

@@ -25,21 +25,6 @@
 
 int main(int argc, char *argv[])
 {
-    // lets do some progressbar testing
-    // auto progress = progressbar::ProgressbarReportDynamic(progressbar::FullReport);
-    // progress.start("first task");
-    // std::this_thread::sleep_for(std::chrono::seconds(3));
-    // progress.update(0.5f);
-    // std::this_thread::sleep_for(std::chrono::seconds(3));
-    // progress.start("second task");
-    // std::this_thread::sleep_for(std::chrono::seconds(3));
-    // progress.update(0.3f);
-    // std::this_thread::sleep_for(std::chrono::seconds(3));
-    // progress.end();
-    // std::this_thread::sleep_for(std::chrono::seconds(3));
-    // progress.end();
-
-
     argparse::ArgumentParser program("Ridge Surface Finder", RidgeSurfaceFinder_VERSION_MAJOR + "." + RidgeSurfaceFinder_VERSION_MINOR);
     program.add_argument("input").help("Numpy input file to load");
     program.add_argument("seed").help("Numpy label for voxel seed or wavefront object");
