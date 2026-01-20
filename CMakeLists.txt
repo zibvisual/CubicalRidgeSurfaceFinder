@@ -16,12 +16,15 @@ configure_file(Config.h.in Config.h)
 # definitions
 add_definitions(-D__DATAPATH_RAW__="${CMAKE_CURRENT_BINARY_DIR}/data")
 
-# create library
+# connect libraries
 add_subdirectory(includes/boost_heap)
 add_subdirectory(includes/boost_hash)
 add_subdirectory(includes/fmt)
 
-# add_subdirectory(src)
+# library prefix
+set(CMAKE_STATIC_LIBRARY_PREFIX "")
+
+# create own library
 set(SOURCES src/utils/Vec.cpp src/rsf/CubicalRidgeSurfaceFinder.cpp src/io/npy.cpp src/rsf/ChangeGraph.cpp)
 add_library(rsflib STATIC ${SOURCES})
 target_include_directories(rsflib PUBLIC src)

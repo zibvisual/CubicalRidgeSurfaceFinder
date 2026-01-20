@@ -872,7 +872,7 @@ namespace ridgesurface
     }
 
     void
-    CubicalRidgeSurfaceFinder::finalize(surface::Surface* surface)//, HxSpatialGraph* graph)
+    CubicalRidgeSurfaceFinder::finalize(surface::StaticSurface* surface)//, HxSpatialGraph* graph)
     {
         m_progressbar.start("Finalizing Surface");
         surface->clear();
