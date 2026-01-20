@@ -3,6 +3,31 @@ import numpy as np
 
 lib = ctypes.CDLL("/srv/public/ploba/cubicalRidgeSurfaceFinder/build/librsfapi.so")
 
+class VecFloat(ctypes.Structure):
+    _fields_ = [
+        ("x", ctypes.c_float),
+        ("y", ctypes.c_float),
+        ("z", ctypes.c_float),
+    ]
+
+class Triangle(ctypes.Structure):
+    _fields_ = [
+        ("v0", ctypes.c_size_t),
+        ("v1", ctypes.c_size_t),
+        ("v2", ctypes.c_size_t),
+        ("patch", ctypes.c_uint64),
+    ]
+
+class Surface(ctypes.Structure):
+    _fields_ = [
+        ("points", ctypes.POINTER(VecFloat)),
+        ("num_points", ctypes.c_size_t),
+        ("points_capacity", ctypes.c_size_t),
+        ("triangles", ctypes.POINTER(Triangle)),
+        ("num_triangles", ctypes.c_size_t),
+        ("triangles_capacity", ctypes.c_size_t),
+    ]
+
 # the output of the function is set as a void pointer
 lib.CRSF_new.restype = ctypes.c_void_p 
 
@@ -15,9 +40,9 @@ lib.CRSF_setThreshold.argtypes = [
 
 # set the inputs and output of setImage
 lib.CRSF_setImage.argtypes = [
-    ctypes.c_void_p,                  # puntero al objeto C++
-    ctypes.POINTER(ctypes.c_float),   # puntero a los datos de la imagen
-    ctypes.c_int, ctypes.c_int, ctypes.c_int  # width, height, depth
+    ctypes.c_void_p,                  
+    ctypes.POINTER(ctypes.c_float),   
+    ctypes.c_int, ctypes.c_int, ctypes.c_int 
 ]
 lib.CRSF_setImage.restype = None
 
@@ -35,43 +60,22 @@ lib.CRSF_addSeed.restype = None
 lib.CRSF_addAutomaticSeeds.argtypes = [ctypes.c_void_p, ctypes.c_float, ctypes.c_float]
 lib.CRSF_addAutomaticSeeds.restype = ctypes.c_int
 
-# Test the code
-rsf = lib.CRSF_new()
-lib.CRSF_setThreshold(rsf, 0.2, 0.8)
+# free surface memory
+lib.free_surface.argtypes = [ctypes.POINTER(Surface)]
+lib.free_surface.restype = None
 
-#print(f"min threshold: {lib.CRSF_getMinThreshold(rsf):.2f}" )
+# compute
+lib.CRSF_compute.argtypes = [ctypes.c_void_p]
+lib.CRSF_compute.restype = None
 
-# Create an 3D image
-depth, height, width = 5, 4, 3
-img = np.random.rand(depth, height, width).astype(np.float32)
-img = np.ascontiguousarray(img) # Make sure that it is contiguous in memory
+# recalculate
+lib.CRSF_recalculate.argtypes = [ctypes.c_void_p]
+lib.CRSF_recalculate.restype = None
 
-# Obtain the pointer
-img_ptr = img.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+# getPatchedSurface
+lib.CRSF_getPatchedSurface.argtypes = [ctypes.c_void_p] 
+lib.CRSF_getPatchedSurface.restype = ctypes.POINTER(Surface)
 
-# Call the function
-lib.CRSF_setImage(rsf, img_ptr, width, height, depth)
-#print('Function called without errors')
-
-# add a seed point
-x, y, z = 1.5, 2.5, 3.5
-distance = 2.0
-lib.CRSF_addSeed(rsf, x, y, z, distance)
-#print(f"Seed added at ({x}, {y}, {z}) with distance {distance}.")
-
-#add automatic seed
-index = lib.CRSF_addAutomaticSeeds(rsf, 0.5, 2)
-#if index >= 0:
-    #print(f"Automatic seed added at index {index}")
-#else:
-    #print("No automatic seed added")
-
-# clear seed points
-lib.CRSF_clearSeedPoints(rsf)
-
-# compute and recalculate
-lib.CRSF_compute(rsf)
-lib.CRSF_recalculate(rsf)
-
-# Clean
-lib.CRSF_delete(rsf)
+# finalize
+lib.CRSF_finalize.argtypes = [ctypes.c_void_p]
+lib.CRSF_finalize.restype = ctypes.POINTER(Surface)
