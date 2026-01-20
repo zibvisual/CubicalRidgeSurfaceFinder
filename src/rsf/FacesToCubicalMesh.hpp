@@ -100,12 +100,12 @@ public:
             surface->addTriangle(
                 m_voxelToMeshPoint[corners[0]],
                 m_voxelToMeshPoint[corners[1]],
-                m_voxelToMeshPoint[corners[3]],
+                m_voxelToMeshPoint[corners[3]]
             );
             surface->addTriangle(
                 m_voxelToMeshPoint[corners[1]],
                 m_voxelToMeshPoint[corners[2]],
-                m_voxelToMeshPoint[corners[3]],
+                m_voxelToMeshPoint[corners[3]]
             );
             ++it;
         }

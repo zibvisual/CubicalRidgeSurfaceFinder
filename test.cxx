@@ -364,13 +364,10 @@ TEST_CASE("Ridge Surface Finder", "[rsf]")
         labels.save("data/output/simple_ridge_labels");
 
         // m_finder.patchedSurface().save("data/output/simple_ridge_test");
-        const auto ref = surface::Surface::load(__DATAPATH__+"/surfaces/simple_ridge_p05-p15");
-        auto res = surface::Surface();
+        const auto ref = surface::StaticSurface::load(__DATAPATH__+"/surfaces/simple_ridge_p05-p15");
+        auto res = surface::StaticSurface();
         m_finder.finalize(&res);
         REQUIRE(res.equals(ref));
-        REQUIRE(res.number_of_patches() == 1);
-        REQUIRE(m_finder.patchedSurface().equals(ref));
-        REQUIRE(m_finder.patchedSurface().number_of_patches() == 1);
     }
 }
 

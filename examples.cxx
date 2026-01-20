@@ -136,7 +136,7 @@ int main(int argc, char *argv[])
         m_finder.setThresholds(min,max);
         m_finder.recalculate();
         
-        auto surf = surface::Surface();
+        auto surf = surface::StaticSurface();
         m_finder.finalize(&surf);
         surf.save(__DATAPATH__ + fmt::format("/examples/{}_surf.obj", example_str));
         std::cout << fmt::format("Saved result in {}/examples/{}_surf.obj", __DATAPATH__, example_str) << std::endl;

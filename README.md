@@ -8,7 +8,7 @@ To compile, one should use cmake with features of c++23 or newer.
 
 From the root of the project:
 ```
-cmake -S . -B build/ -D CMAKE_BUILD_TYPE=Release
+cmake -S . -B build/ -D CMAKE_BUILD_TYPE=Release -D CMAKE_POSITION_INDEPENDENT_CODE=ON
 cmake --build build/
 ```
 

@@ -168,7 +168,7 @@ int main(int argc, char *argv[])
         m_finder.setThresholds(min,max);
         m_finder.recalculate();
         
-        auto surf = surface::Surface();
+        auto surf = surface::StaticSurface();
         m_finder.finalize(&surf);
         std::filesystem::path default_output_name = program.get("input");
         default_output_name = default_output_name.replace_filename(default_output_name.stem().concat("_rsf")).replace_extension("obj");
