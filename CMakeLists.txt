@@ -23,9 +23,10 @@ add_subdirectory(includes/fmt)
 
 # library prefix
 set(CMAKE_STATIC_LIBRARY_PREFIX "")
+set(CMAKE_SHARED_LIBRARY_PREFIX "")
 
 # create own library
-set(SOURCES src/utils/Vec.cpp src/rsf/CubicalRidgeSurfaceFinder.cpp src/io/npy.cpp src/rsf/ChangeGraph.cpp)
+set(SOURCES src/utils/Vec.cpp src/rsf/CubicalRidgeSurfaceFinder.cpp src/rsf/Seed.cpp src/io/npy.cpp)
 add_library(rsflib STATIC ${SOURCES})
 target_include_directories(rsflib PUBLIC src)
 target_link_libraries(rsflib PUBLIC fmt::fmt-header-only)

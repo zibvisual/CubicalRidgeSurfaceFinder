@@ -148,3 +148,14 @@ inline std::ostream& operator<<(std::ostream& os, const VecFloat& vec)
     os << "("<< vec.x() << ", " << vec.y() << ", " << vec.z() << ")";
     return os;
 }
+
+template<>
+struct std::hash<VecFloat>
+{
+    std::size_t operator()(const VecFloat& vec) const
+    {
+        return ((std::hash<float>()(vec.x())
+        ^ (std::hash<float>()(vec.y()) << 1)) >> 1)
+        ^ (std::hash<float>()(vec.z()) << 1);
+    }
+};

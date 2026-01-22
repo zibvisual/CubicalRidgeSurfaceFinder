@@ -169,7 +169,7 @@ extern "C" {
      *         A valid seed is one with a relative distance greater than `minDistanceRel`.
      */
     int CRSF_addAutomaticSeeds(ridgesurface::CubicalRidgeSurfaceFinder* rsf, float minDistanceRel, float maxDistanceNewSeed) {
-        return rsf->addSeed(minDistanceRel, maxDistanceNewSeed);
+        return rsf->addSeed(minDistanceRel, maxDistanceNewSeed).value_or(-1);
     }
 
     /**
@@ -199,7 +199,7 @@ extern "C" {
      * @return A pointer to a `Surface_C` struct containing the final computed surface data.
      */
     Surface_C* CRSF_compute_finalize(ridgesurface::CubicalRidgeSurfaceFinder* rsf) {
-        rsf->compute();
+        rsf->calculate();
         surface::StaticSurface surface;
         rsf->finalize(&surface);
 

@@ -357,7 +357,7 @@ TEST_CASE("Ridge Surface Finder", "[rsf]")
         m_finder.setInput(&img);
         m_finder.addSeed(ridgesurface::Seed::Seedpoint(VecFloat(5.f), 50.0f));
         m_finder.setThresholds(0.5f,1.5f);
-        m_finder.compute();
+        m_finder.calculate();
         
         auto labels = RawField<uint16_t>(img.dims());
         m_finder.castToLabels(labels.data());

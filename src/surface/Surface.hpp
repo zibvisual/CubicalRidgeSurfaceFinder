@@ -86,18 +86,7 @@ namespace surface {
             return m_patch;
         }
 
-        void remove(){
-            m_patch = 0;
-        }
-
-        void move(std::size_t patch){
-            m_patch = patch;
-        }
-
-        bool valid() const{
-            return m_patch != 0;
-        }
-
+        uint64_t m_patch;
     private:
         std::size_t min_index() const {
             std::size_t index = 0;
@@ -111,7 +100,6 @@ namespace surface {
             return index;
         }
         std::array<std::size_t, 3> m_points;
-        std::size_t m_patch;
     };
 
     inline std::ostream& operator<<(std::ostream& os, const Triangle& triangle)
@@ -120,11 +108,15 @@ namespace surface {
         return os;
     }
 
+    struct PatchInformation {
+        uint64_t m_patch;
+        bool orientation;
+    };
+
     /**
-     * A triangulated surface mesh with patches (triangle groups). Triangles have a patch id or 0 (representing an obsolete triangle).
-     * Such patches are counted from 1. This has the nice benefit that the number of patches is equal to the last patch id.
-     * 
-     * TODO: Interface with Amira: Each patch migh want to invert the orientation of the triangles
+     * A triangulated surface mesh with patches (triangle groups). Triangles have a patch id.
+     * A list of PatchInformation is also given. They contain the patch_id and if the orientation of the patch is flipped.
+     * If a patch id is not contained in the PatchInformation list, one may assume the patch to be deleted and not used anymore.
      */
     class Surface {
     public:
@@ -169,20 +161,24 @@ namespace surface {
         }
 
         void removeUnusedPoints(){
-            //TODO
+            // TODO: go through all triangles and collect indices of the points. 
         }
-        void removeObsoleteTriangles(){
-            //TODO
+
+        /**
+         * If mulitple patches should be removed, prefer removePatches()
+         */
+        void removePatch(uint64_t id){
+
+            m_triangles.erase(std::remove_if(begin(m_triangles), end(m_triangles), [id](const auto& triangle) { return triangle.patch_id() == id;}));
+            removeUnusedPoints();
         }
-        void removePatch(int64_t id){
-            for(std::size_t i = 0; i < m_triangles.size(); ++i){
-                if(m_triangles[i].patch_id() == id){
-                    m_triangles[i].remove();
-                }
-            }
-            // TODO: we now have an empty patch...
-            // TODO: remove unused points!
+
+        void removePatches(const std::unordered_set<uint64_t>& ids)
+        {
+            m_triangles.erase(std::remove_if(begin(m_triangles), end(m_triangles), [&ids](const auto& triangle) { return ids.contains(triangle.patch_id());}));
+            removeUnusedPoints();
         }
+
         bool validSurface() const;
         bool validManifold() const;
         // void addPatch() --> ?
@@ -317,15 +313,14 @@ namespace surface {
         }
 
         /**
-         * All triangles are moved from source to target
+         * All triangles are moved from source to target (unneccasary)
          */
         void replacePatch(std::size_t source, std::size_t target){
             for(auto triangle : m_triangles){
                 if(triangle.patch_id() == source){
-                    triangle.move(target);
+                    triangle.m_patch = target;
                 }
             }
-            // TODO: we now have an empty patch....
         }
 
         void flipPatchOrientation(std::size_t patch){
@@ -358,6 +353,7 @@ namespace surface {
         std::vector<VecFloat> m_points;
         // contain the indices of the points
         std::vector<Triangle> m_triangles;
+        std::vector<PatchInformation> m_patches;
     };
 
     // Keeps track of their points and their indices

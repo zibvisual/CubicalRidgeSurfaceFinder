@@ -6,6 +6,7 @@
 #include <utils/Lattice.hpp>
 #include <surface/Surface.hpp>
 #include <surface/StaticSurface.hpp>
+#include <surface/SurfaceUpdate.hpp>
 #include "Faces.hpp"
 
 class FacesToCubicalMesh
@@ -56,6 +57,45 @@ public:
             );
             ++it;
         }
+    }
+
+    template <class Iter>
+    void
+    populateSurfacePatch(surface::SurfaceUpdateBuilder& builder, uint64_t patch, Lattice lattice, Iter begin, Iter end)
+    {
+        // add all faces and their corresponding points (use a hashmap to keep track of the points)
+        builder.startPatch(patch);
+
+        Iter it = begin;
+        while (it != end)
+        {
+            Face face = *it;
+            auto corners = face.cornerIndices(lattice.dims());
+            auto corner_positions = face.cornerPosition(lattice);
+            for (std::size_t i = 0; i < 4; ++i)
+            {
+                // add points if necessary
+                const auto corner = corners[i];
+                if (!m_voxelToMeshPoint.contains(corner))
+                {
+                    m_voxelToMeshPoint[corner] = builder.addPoint(corner_positions[i]);
+                }
+            }
+            // add the two triangles with the correct orientation and patch number
+            builder.addTriangle(
+                m_voxelToMeshPoint[corners[0]],
+                m_voxelToMeshPoint[corners[1]],
+                m_voxelToMeshPoint[corners[3]]
+            );
+            builder.addTriangle(
+                m_voxelToMeshPoint[corners[1]],
+                m_voxelToMeshPoint[corners[2]],
+                m_voxelToMeshPoint[corners[3]]
+            );
+            ++it;
+        }
+
+        builder.endPatch();
     }
 
     template <class Iter>

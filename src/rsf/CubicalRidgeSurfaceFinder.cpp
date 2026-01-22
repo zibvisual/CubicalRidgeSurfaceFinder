@@ -27,26 +27,26 @@
 // PERF: the smallest circle. Doing this for all circles results in the mesh itself.
 namespace
 {
-    inline std::size_t
-    label_to_seed(std::size_t label)
+    inline uint64_t
+    label_to_seed(uint64_t label)
     {
         return (label >> 1) - 1;
     }
 
-    inline std::size_t
-    seed_to_label(std::size_t seed, bool side)
+    inline uint64_t
+    seed_to_label(uint64_t seed, bool side)
     {
-        return static_cast<std::size_t>((seed << 1) + 2 + static_cast<std::size_t>(side));
+        return static_cast<uint64_t>((seed << 1) + 2 + static_cast<uint64_t>(side));
     }
 
-    inline std::size_t
-    seed_to_label(std::size_t seed, std::size_t label)
+    inline uint64_t
+    seed_to_label(uint64_t seed, uint64_t label)
     {
-        return static_cast<std::size_t>((seed << 1) + 2 + (label & 1));
+        return static_cast<uint64_t>((seed << 1) + 2 + (label & 1));
     }
 
-    inline std::size_t
-    label_flip(std::size_t label)
+    inline uint64_t
+    label_flip(uint64_t label)
     {
         return label ^ 1;
     }
@@ -55,28 +55,10 @@ namespace
 
 namespace ridgesurface
 {
-    bool
-    SeedPoint::operator==(const SeedPoint& rhs) const
-    {
-        return (point == rhs.point);
-    }
-
-    bool
-    SeedLine::operator==(const SeedLine& rhs) const
-    {
-        return (points == rhs.points);
-    }
-
-    SeedIterator
-    Seed::getVoxelSources(Lattice lattice)
-    {
-        return SeedIterator(*this, lattice);
-    }
-
     CubicalRidgeSurfaceFinder::CubicalRidgeSurfaceFinder(progressbar::Progressbar& progress)
         : m_progressbar(progress)
         , m_seeds()
-        , m_seeds_change()
+        , m_seeds_update()
         , m_graph()
         , m_label_view(0)
         , ts_sphere_coloring(nullptr)
@@ -88,7 +70,7 @@ namespace ridgesurface
         , m_probability(nullptr)
         , m_cum_time()
         , m_cum_distance()
-        , m_patched_surface()
+        , m_surface_update()
         , m_patch_orientation()
         , m_surface_writer()
         , m_seedpoints_candidates()
@@ -152,17 +134,22 @@ namespace ridgesurface
         m_cum_distance.fill();
     }
 
-    const Seed&
-    CubicalRidgeSurfaceFinder::getSeed(std::size_t i) const
+    const CubicalRidgeSurfaceFinder& CubicalRidgeSurfaceFinder::as_const() const
     {
-        return m_seeds[i];
+        return *this;
+    }
+
+    const Seed&
+    CubicalRidgeSurfaceFinder::getSeed(uint64_t id) const
+    {
+        return m_seeds.at(id);
     }
 
     Seed&
-    CubicalRidgeSurfaceFinder::getSeed(std::size_t i)
+    CubicalRidgeSurfaceFinder::getSeed(uint64_t id)
     {
-        m_seeds_change.change(i);
-        return m_seeds[i];
+        m_seeds_update.insert(id);
+        return m_seeds.at(id);
     }
 
     const Seed*
@@ -173,10 +160,10 @@ namespace ridgesurface
             return nullptr;
         }
         auto seed = label_to_seed(m_cum_label.data()[id]);
-        return &m_seeds[seed];
+        return &m_seeds.at(seed);
     }
 
-    std::optional<std::size_t>
+    std::optional<uint64_t>
     CubicalRidgeSurfaceFinder::getSeedIndexFromVoxel(std::size_t id) const
     {
         if (m_cum_label.data()[id] < 2)
@@ -193,7 +180,7 @@ namespace ridgesurface
         return m_seeds.size();
     }
 
-    int
+    std::optional<uint64_t>
     CubicalRidgeSurfaceFinder::addSeed(float minDistanceRel, float maxDistanceNewSeed)
     {
         // check if we have a valid seedpoint candidate -> we want the biggest relative distance!
@@ -217,14 +204,12 @@ namespace ridgesurface
                 }
             }
         }
-        std::cout << "Size of candidates: " << m_seedpoints_candidates.size() << std::endl;
         if (max < minDistanceRel || max_id < 0)
         {
-            return -1;
+            return {};
         }
         auto point = m_lattice.worldPosition(Lattice::gridLocationFromCIndex(static_cast<std::size_t>(max_id), m_lattice.dims()));
-        addSeed(Seed::Seedpoint(point, maxDistanceNewSeed));
-        return index;
+        return addSeed(Seed::Seedpoint(point, maxDistanceNewSeed));
     }
 
     int
@@ -289,68 +274,70 @@ namespace ridgesurface
         return cnt;
     }
 
-    void
+    uint64_t
     CubicalRidgeSurfaceFinder::addSeed(Seed seed)
     {
-        m_seeds.push_back(seed);
-        m_seeds_change.add();
+        auto id = m_id_counter++;
+        m_seeds.insert({id, seed});
+        m_seeds_update.insert(id);
+        return id;
     }
 
-    void
-    CubicalRidgeSurfaceFinder::addSeed(std::size_t i, Seed seed)
+    void CubicalRidgeSurfaceFinder::updateSeed(uint64_t id, Seed seed)
     {
-        m_seeds.insert(m_seeds.begin() + i, seed);
-        m_seeds_change.add(i);
+        m_seeds[id] = seed;
+        m_seeds_update.insert(id);
     }
 
-    void
-    CubicalRidgeSurfaceFinder::setSeed(std::size_t i, Seed seed)
+    bool
+    CubicalRidgeSurfaceFinder::removeSeed(uint64_t id)
     {
-        m_seeds[i] = seed;
-        m_seeds_change.change(i);
-    }
-
-    void
-    CubicalRidgeSurfaceFinder::removeSeed(std::size_t i)
-    {
-        m_seeds.erase(m_seeds.begin() + i);
-        m_seeds_change.remove(i);
+        m_seeds_update.insert(id);
+        return m_seeds.erase(id);
     }
 
     void
     CubicalRidgeSurfaceFinder::clearSeeds()
     {
+        for(auto const& pair : m_seeds){
+            m_seeds_update.insert(pair.first);
+        }
         m_seeds.clear();
-        m_seeds_change.clear();
-        // m_seeds_voxels.clear();
+        // reset counter ?
+        // m_id_counter = 0;
     }
 
-    void
+    std::vector<uint64_t>
     CubicalRidgeSurfaceFinder::newSeeds(std::vector<Seed>& seeds)
     {
-        // we assume no duplicates for now!
-        auto correspondence = std::vector<std::size_t>(seeds.size());
-        // diff current status and new seeds (brute force for now)
-        for (std::size_t j = 0; j < seeds.size(); ++j)
-        {
-            correspondence[j] = m_seeds_change.noneValue();
-            for (std::size_t i = 0; i < numOfSeeds(); ++i)
-            {
-                if (m_seeds[i] == seeds[j])
-                {
-                    correspondence[j] = i;
-                    break;
-                }
+        // Hash the seeds
+        auto map = std::unordered_map<Seed, uint64_t>();
+        for(const auto& pair : m_seeds){
+            map.insert({pair.second, pair.first});
+        }
+
+        // add all new seeds and get the ids of the already existing ones
+        auto found = std::unordered_set<uint64_t>();
+        auto list = std::vector<uint64_t>();
+        for(const auto& seed : seeds){
+            if(map.contains(seed)){
+                auto id = map[seed];
+                list.push_back(id);
+                found.insert(id);
+            }else{
+                list.push_back(addSeed(seed));
             }
         }
-        m_seeds = seeds;
-        m_seeds_change.set(correspondence);
-    }
 
-    int
-    CubicalRidgeSurfaceFinder::compute()
-    {
-        return update();
+        // remove all old seeds
+        for(const auto& pair : map){
+            if(!found.contains(pair.second))
+            {
+                removeSeed(pair.second);
+            }
+        }
+
+        return list;
     }
 
     void
@@ -494,12 +481,6 @@ namespace ridgesurface
     //     second = m_second_grid_point;
     // }
 
-    void
-    CubicalRidgeSurfaceFinder::computePatchSurface(surface::Surface& surface)
-    {
-        surface = m_patched_surface.clone();
-    }
-
     // std::vector<Face>
     // CubicalRidgeSurfaceFinder::copyFacePatch()
     // {
@@ -518,230 +499,118 @@ namespace ridgesurface
     // }
 
     void
-    CubicalRidgeSurfaceFinder::updateInsert(std::size_t i)
+    CubicalRidgeSurfaceFinder::updateInsert(uint64_t id)
     {
-        grow(i);
+        grow(id);
         // check m_patch
         // std::cout << "DEBUG: Found " << m_patch.size() << " faces!" << std::endl;
-        merge(i);
-        addPatch(i);
+        merge(id);
+        addPatch(id);
         // save the voxels we are looking at
-        m_seeds_voxels[i].clear();
+        m_seeds_voxels[id].clear();
         for (auto pair : m_label_view.inner())
         {
-            m_seeds_voxels[i].push_back(pair.first);
+            m_seeds_voxels[id].push_back(pair.first);
         }
+        // other considerations:
         // save possible candidates -> this is done in addPatch!
         // m_graph is changed in update_neighbor_graph
     }
 
     void
-    CubicalRidgeSurfaceFinder::updateClear(std::size_t i)
+    CubicalRidgeSurfaceFinder::updateClear(uint64_t id)
     {
-        // surface
-        m_patched_surface.removePatch(i+1);
+        // surface update
+        m_surface_update.removePatch(id);
+        m_seeds_in_surface.erase(id);
         // fields
-        for (int64_t j : m_seeds_voxels[i])
+        for (int64_t j : m_seeds_voxels[id])
         {
             // this assertion might trigger sometimes...
             // assert(m_cum_label[i] != 0);
             auto seed = label_to_seed(m_cum_label.data()[j]);
-            // if m_seeds_change.wasDeleted(seed)
-            if (seed == i)
+            if (seed == id)
             {
-                //TODO: m_cum_label are not pointers anymore...!
                 m_cum_label.data()[j] = m_cum_label.getUndefinedValue();
                 m_cum_time.data()[j] = INFINITY;
                 m_cum_distance.data()[j] = INFINITY;
             }
         }
         // graphs
-        m_graph.clearNode(i);
+        m_graph.removeNode(id);
         // voxel list
-        m_seeds_voxels[i].clear();
+        m_seeds_voxels.erase(id);
         // candidates
-        m_seedpoints_candidates[i].clear();
+        m_seedpoints_candidates.erase(id);
     }
 
-    void
-    CubicalRidgeSurfaceFinder::updateReplace(std::size_t left, std::size_t right)
+    surface::SurfaceUpdate
+    CubicalRidgeSurfaceFinder::calculate()
     {
-        // replace patches on surface (left = right)
-        m_patched_surface.replacePatch(right+1, left+1);
-
-        // auto& triangles = m_patched_surface->patches[right]->triangles;
-        // for (mclong i = 0; i < triangles.size(); ++i)
-        // {
-        //     m_patched_surface->triangles()[triangles[i]].patch = left;
-        // }
-        // // swap patches (memory)
-        // auto tmp = m_patched_surface->patches[left];
-        // m_patched_surface->patches[left] = m_patched_surface->patches[right];
-        // m_patched_surface->patches[right] = tmp;
-
-
-        // replace labels
-        for (int64_t i : m_seeds_voxels[right])
-        { // this assertion might trigger sometimes...
-            //            assert(m_cum_label[i]);
-            m_cum_label.data()[i] = seed_to_label(left, m_cum_label.data()[i]);
-        }
-        // replace ids in graph
-        m_graph.replaceNodes(left, right);
-        // replace voxels  // we clear afterwards anyways, so not necessary here?
-        m_seeds_voxels[left].swap(m_seeds_voxels[right]);
-        // replace candidates
-        m_seedpoints_candidates[left].swap(m_seedpoints_candidates[right]);
-    }
-
-    int
-    CubicalRidgeSurfaceFinder::update()
-    {
-        m_progressbar.start("Extract Cubical Ridge Surface Patches");
+        m_progressbar.start("Calculate Patches");
 
         // we assume m_seeds and m_seeds_change to be in sync
         // fields which must be updated accordingly:
         // - m_graph
         // - m_cum_*
-        // - m_pathced_surface
+        // - m_seeds_update
+        // - m_seeds_in_surface
+        // - m_surface_update
         // - m_seeds_voxels
         // - m_seedpoints_candidates
 
-        // resize data structures
-        updateReserve();
-
-        // count the values
-        std::size_t remove_counter = 0;
-        std::size_t replace_counter = 0;
-        std::size_t insert_counter = 0;
-        for (std::size_t i = 0; i < m_seeds_change.pastSize(); ++i)
-        {
-            remove_counter += static_cast<std::size_t>(m_seeds_change.wasDeleted(i));
-            replace_counter += static_cast<std::size_t>(m_seeds_change.willBeRenamed(i));
+        // consume m_seeds_update
+        auto counter = 0;
+        auto size = m_seeds_update.size();
+        auto iter = m_seeds_update.begin();
+        while (iter != m_seeds_update.end()){
+            const auto id = *iter;
+            if (m_progressbar.stop_and_end()) return m_surface_update.build();
+            if(m_seeds_in_surface.contains(id)){
+                // remove current patch
+                updateClear(id);
+            }
+            if(m_seeds.contains(id)){
+                // add/update patch
+                updateInsert(id);
+            }
+            iter = m_seeds_update.erase(iter);
+            m_progressbar.update(++counter/static_cast<float>(size));
+            m_progressbar.update(fmt::format("Calculate Patches ({:d} / {:d})", counter, size));
         }
-        for (std::size_t i = 0; i < m_seeds_change.futureSize(); ++i)
-        {
-            insert_counter += static_cast<std::size_t>(m_seeds_change.willBeAdded(i));
-        }
-
-        // magic number multiplier (we assume adding patches takes x times longer than deleting)
-        const float insert_mult = 10.0f;
-        const float target = remove_counter + replace_counter + insert_counter * insert_mult;
-
-        updateClearTask(remove_counter, remove_counter / target);
-        if (m_progressbar.stop_and_end()) return 0;
-        updateReplaceTask(replace_counter, replace_counter / target);
-        if (m_progressbar.stop_and_end()) return 0;
-        updateInsertTask(insert_counter, insert_counter * insert_mult / target);
-
-        // delete uneccesary space at the end (not done in m_graph for now)
-        m_seeds_voxels.resize(m_seeds_change.futureSize());
-        m_seedpoints_candidates.resize(m_seeds_change.futureSize());
-
         update_patch_orientations();
-
-        m_seeds_change.next();
         m_progressbar.end();
-        return 1;
-    }
-
-    void 
-    CubicalRidgeSurfaceFinder::updateClearTask(std::size_t n, float progress){
-        std::size_t counter = 0;
-        m_progressbar.subtask(progress);
-        m_progressbar.start("Remove Patches");
-        for (std::size_t i = 0; i < m_seeds_change.pastSize(); ++i)
-        {
-            if (m_seeds_change.wasDeleted(i))
-            {
-                if (m_progressbar.stop_and_end()) return;
-                updateClear(i);
-                m_progressbar.update(++counter/static_cast<float>(n));
-                m_progressbar.update(fmt::format("Removing Patches ({:d} / {:d})", counter, n));
-            }
-        }
-        m_patched_surface.removeObsoleteTriangles();
-        m_patched_surface.removeUnusedPoints();
-        m_progressbar.end();
-    }
-
-    void 
-    CubicalRidgeSurfaceFinder::updateReplaceTask(std::size_t n, float progress){
-        std::size_t counter = 0;
-        m_progressbar.subtask(progress);
-        m_progressbar.start("Replace Patches");
-        // now reorder, without overwriting an id before renaming it itself (go to the end of the graph paths) -> this could be done by an iterator
-        for (std::size_t i = 0; i < m_seeds_change.pastSize(); ++i)
-        {
-            auto id = i;
-            while (m_seeds_change.willBeRenamed(id))
-            {
-                id = m_seeds_change.renamedByUnsafe(id);
-            }
-            // go back where you came from
-            while (m_seeds_change.wasRenamed(id))
-            {
-                auto old_id = m_seeds_change.renamedFromUnsafe(id);
-                updateReplace(id, old_id);
-                m_progressbar.update(++counter/static_cast<float>(n));
-                m_progressbar.update(fmt::format("Replacing Patches ({:d} / {:d})", counter, n));
-                // update graph (necessary such that we do not replace mutliple times)
-                m_seeds_change.replace(id, old_id);
-                id = old_id;
-            }
-        }
-        m_progressbar.end();
-    }
-
-    void 
-    CubicalRidgeSurfaceFinder::updateInsertTask(std::size_t n, float progress){
-        m_progressbar.subtask(progress);
-        m_progressbar.start("Calculating Patches");
-        std::size_t counter = 0;
-        for (std::size_t i = 0; i < m_seeds_change.futureSize(); ++i)
-        {
-            if (m_seeds_change.willBeAdded(i))
-            {
-                if (m_progressbar.stop_and_end()) return;
-                updateInsert(i);
-                m_progressbar.update(++counter/static_cast<float>(n));
-                m_progressbar.update(fmt::format("Calculating Patches ({:d} / {:d})", counter, n));
-            }
-        }
-        m_progressbar.end();
+        return m_surface_update.build();
     }
 
     void
     CubicalRidgeSurfaceFinder::update_patch_orientations()
     {
-        auto new_orientations = std::vector<bool>();
-        new_orientations.resize(m_seeds_change.futureSize());
         // dfs on the graph
-        std::vector<bool> visited;
-        visited.resize(new_orientations.size());
-        std::vector<std::size_t> stack;
+        std::unordered_map<uint64_t, bool> orientations;
+        orientations.reserve(m_seeds.size());
+        std::vector<uint64_t> stack;
 
-        for (std::size_t i = 0; i < visited.size(); ++i)
+        for (auto &pair : m_seeds)
         {
-            if (!visited[i])
+            auto id = pair.first;
+            if (!orientations.contains(id))
             {
                 // start search
-                stack.push_back(i);
-                visited[i] = true;
-                new_orientations[i] = false; // is already the case
+                stack.push_back(id);
+                orientations.insert({id, false});
                 while (!stack.empty())
                 {
                     auto current = stack.back();
-                    bool current_orientation = new_orientations[current];
+                    bool current_orientation = orientations[current];
                     stack.pop_back();
                     // check all neighbors
                     for (auto edge : m_graph.neighbors(current))
                     {
-                        if (!visited[edge.first])
+                        if (!orientations.contains(edge.first))
                         {
                             bool new_orientation = current_orientation ^ edge.second;
-                            new_orientations[edge.first] = new_orientation;
-                            visited[edge.first] = true;
+                            orientations[edge.first] = new_orientation;
                             stack.push_back(edge.first);
                         }
                     }
@@ -750,55 +619,17 @@ namespace ridgesurface
         }
 
         // Flip Material if necessary:
-        for (std::size_t i = 0; i < m_seeds_change.futureSize(); ++i)
-        {
-            // flip materials instead of the triangles as this is a lot faster
-            // m_patched_surface->invertTriangles(i);
-            if (m_seeds_change.willBeAdded(i))
-            {
-                if (new_orientations[i])
-                {
-                    m_patched_surface.flipPatchOrientation(i+1);
-                }
-            }
-            else if (new_orientations[i] != m_patch_orientation[m_seeds_change.renamedFromUnsafe(i)])
-            {
-                // unsafe method is fine, as we allow identity and invalid id is not possible, as we checked willBeAdded before
-                m_patched_surface.flipPatchOrientation(i+1);
+        // DIFF orientation and m_patch_orientation -> add the diff to SurfaceUpdate
+        for(auto pair : orientations){
+            if (!m_patch_orientation.contains(pair.first) || m_patch_orientation[pair.first] != pair.second) {
+                m_surface_update.addFlip(pair.first);
             }
         }
-
-        m_patch_orientation = new_orientations;
-
-        // std::cout << "--------------- ORIENTATION ------------" << std::endl;
-        // for (std::size_t i = 0; i < m_patch_orientation.size(); ++i)
-        // {
-        //     std::cout << (m_patch_orientation[i] ? "true" : "false") << std::endl;
-        // }
+        m_patch_orientation = std::move(orientations);
     }
 
     void
-    CubicalRidgeSurfaceFinder::updateReserve()
-    {
-        // add to all datastructures to ensure that there is enough space
-        if (m_seeds_change.futureSize() > m_seeds_change.pastSize())
-        {
-            auto diff = m_seeds_change.futureSize() - m_seeds_change.pastSize();
-            for (std::size_t i = 0; i < diff; ++i)
-            {
-                m_graph.addNode(m_seeds_change.pastSize() + diff);
-                // voxel list
-                m_seeds_voxels.push_back(std::vector<int64_t>());
-                // candidates
-                m_seedpoints_candidates.push_back(std::vector<int64_t>());
-                // patch
-                // m_patched_surface.newPatch();
-            }
-        }
-    }
-
-    void
-    CubicalRidgeSurfaceFinder::addPatch(std::size_t i)
+    CubicalRidgeSurfaceFinder::addPatch(uint64_t id)
     {
         // Generate a graph of the connections of the faces of the patch (m_patch)
         auto face_graph = FaceGraph::createWithID(m_patch, m_lattice.dims());
@@ -807,44 +638,41 @@ namespace ridgesurface
         auto end = face_graph.borderEnd();
         while (it != end)
         {
-            m_seedpoints_candidates[i].push_back(*it);
+            m_seedpoints_candidates[id].push_back(*it);
             ++it;
         }
 
         // we may assume that all necessary patches exist
-        m_surface_writer.populateSurfacePatch(&m_patched_surface, i+1, m_lattice, face_graph.begin().convert(), face_graph.end().convert());
+        m_surface_writer.populateSurfacePatch(m_surface_update, id, m_lattice, face_graph.begin().convert(), face_graph.end().convert());
+        m_seeds_in_surface.insert(id);
     }
 
-    int
+    surface::SurfaceUpdate
     CubicalRidgeSurfaceFinder::recalculate()
     {
         // clear data
         m_graph.clear();
         m_surface_writer.clear();
-        m_patched_surface.clear();
+        m_surface_update.clear();
+        m_seeds_update.clear();
         m_seedpoints_candidates.clear();
         m_seeds_voxels.clear();
-        m_seeds_change.reset();
 
         resetFields();
-        updateReserve();
 
+        int counter = 0;
         m_progressbar.start("Extracting Ridge Surface Patches");
-        for (std::size_t i = 0; i < m_seeds.size(); ++i)
+        for (auto &pair : m_seeds)
         {
-            updateInsert(i);
-            if (m_progressbar.stop())
-            {
-                m_progressbar.end();
-                return i;
-            }
-            m_progressbar.update(static_cast<float>(i) / m_seeds.size());
-            m_progressbar.update(fmt::format("Calculating Patches ({:d} / {:d})",i,m_seeds.size()));
+            updateInsert(pair.first);
+            ++counter;
+            if (m_progressbar.stop_and_end()) return m_surface_update.build();
+            m_progressbar.update(static_cast<float>(counter) / m_seeds.size());
+            m_progressbar.update(fmt::format("Calculating Patches ({:d} / {:d})", counter, m_seeds.size()));
         }
         update_patch_orientations();
-        m_seeds_change.next();
         m_progressbar.end();
-        return m_seeds.size();
+        return m_surface_update.build();
     }
 
     bool
@@ -993,22 +821,22 @@ namespace ridgesurface
     }
 
     void
-    CubicalRidgeSurfaceFinder::merge(std::size_t i)
+    CubicalRidgeSurfaceFinder::merge(uint64_t id)
     {
         // For all neighbors, we calculate the correspondence of their labels to the current labels and save that
-        auto neighbors = std::unordered_map<std::size_t, int>();
+        auto neighbors = std::unordered_map<uint64_t, int>();
         initialize_possible_neighbors(neighbors);
         track_neighbor_correspondence_by_volume(neighbors);
-        merge_cum_fields(i);
-        update_neighbor_graph(i, neighbors);
+        merge_cum_fields(id);
+        update_neighbor_graph(id, neighbors);
         // update_neighbor_graph_better(i); -> this did not work...find out why?
     }
 
     void
-    CubicalRidgeSurfaceFinder::initialize_possible_neighbors(std::unordered_map<std::size_t, int>& neighbors)
+    CubicalRidgeSurfaceFinder::initialize_possible_neighbors(std::unordered_map<uint64_t, int>& neighbors)
     {
         // check if a label field corresponds to a face of the patch -> if so, we found a neighbor!
-        std::unordered_map<std::size_t, std::size_t> seed_counter;
+        std::unordered_map<uint64_t, std::size_t> seed_counter;
         for (auto faceId : m_patch)
         {
             auto face = Face::fromIndex(faceId);
@@ -1123,13 +951,13 @@ namespace ridgesurface
     }
 
     void
-    CubicalRidgeSurfaceFinder::track_neighbor_correspondence_by_volume(std::unordered_map<std::size_t, int>& neighbors)
+    CubicalRidgeSurfaceFinder::track_neighbor_correspondence_by_volume(std::unordered_map<uint64_t, int>& neighbors)
     {
         // calculate correspondence for the orientation of edges
         for (auto pair : m_label_view.inner())
         {
             auto index = pair.first;
-            auto cur_label = static_cast<std::size_t>(pair.second & 1);
+            auto cur_label = static_cast<uint64_t>(pair.second & 1);
             if (m_cum_label.data()[index] == 0)
             {
                 continue;
@@ -1251,21 +1079,21 @@ namespace ridgesurface
     // }
 
     void
-    CubicalRidgeSurfaceFinder::update_neighbor_graph(std::size_t i, const std::unordered_map<std::size_t, int>& neighbors)
+    CubicalRidgeSurfaceFinder::update_neighbor_graph(uint64_t id, const std::unordered_map<uint64_t, int>& neighbors)
     {
-        m_graph.addNode(i);
-        m_graph.addEdge(i, i, false);
+        m_graph.addNode(id);
+        m_graph.addEdge(id, id, false);
 
         // update graph
         for (auto pair : neighbors)
         {
-            m_graph.addEdge(pair.first, i, pair.second <= 0);
-            m_graph.addEdge(i, pair.first, pair.second <= 0);
+            m_graph.addEdge(pair.first, id, pair.second <= 0);
+            m_graph.addEdge(id, pair.first, pair.second <= 0);
         }
     }
 
     void
-    CubicalRidgeSurfaceFinder::merge_cum_fields(std::size_t i)
+    CubicalRidgeSurfaceFinder::merge_cum_fields(uint64_t id)
     {
         const auto& time_view = m_fm.time();
         const auto& distance_view = m_fm.distance();
@@ -1274,7 +1102,7 @@ namespace ridgesurface
         {
             auto index = pair.first;
             // std::size_t cur_label = orientation ? static_cast<std::size_t>((i << 1) + 2 + (pair.second & 1)) : static_cast<std::size_t>((i << 1) + 3 - (pair.second & 1));
-            std::size_t cur_label = static_cast<std::size_t>((i << 1) + 2 + (pair.second & 1));
+            std::size_t cur_label = static_cast<std::size_t>((id << 1) + 2 + (pair.second & 1));
             auto time = time_view.get(index);
             m_cum_label.data()[index] = time < m_cum_time.data()[index] ? cur_label : m_cum_label.data()[index];
             m_cum_distance.data()[index] = time < m_cum_time.data()[index] ? distance_view.get(index) : m_cum_distance.data()[index];
@@ -1283,9 +1111,9 @@ namespace ridgesurface
     }
 
     void
-    CubicalRidgeSurfaceFinder::grow(std::size_t i)
+    CubicalRidgeSurfaceFinder::grow(std::size_t id)
     {
-        Seed seed = m_seeds[i];
+        Seed seed = m_seeds[id];
         auto dims = m_lattice.dims();
         auto voxelSize = m_probability->lattice().voxelsize();
 
@@ -1456,7 +1284,7 @@ namespace ridgesurface
         if(flooding.streamflood({ firstFace, secondFace }))
         {
             // TODO: make this error more formal (not just an std::cout output)
-            std::cout << "could not generate patch " << i << " , as both poles contain the same locale minima" << std::endl;
+            std::cout << "could not generate patch " << id << " , as both poles contain the same locale minima" << std::endl;
         }
 
         auto& mapping = flooding.regions();

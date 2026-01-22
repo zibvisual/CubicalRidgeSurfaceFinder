@@ -12,7 +12,7 @@
 namespace klenert
 {
     template <typename E>
-    class OrderedSparseGraph
+    class SparseGraph
     {
     public:
         class EdgeIterator
@@ -89,10 +89,10 @@ namespace klenert
 
         using value_type = std::size_t;
 
-        OrderedSparseGraph()
+        SparseGraph()
         {}
 
-        OrderedSparseGraph(std::size_t nVertices)
+        SparseGraph(std::size_t nVertices)
             : m_edges()
         {
             m_edges.reserve(nVertices);
@@ -106,106 +106,79 @@ namespace klenert
         }
 
         NeighborIterator
-        neighbors(std::size_t i) const
+        neighbors(uint64_t id) const
         {
-            return NeighborIterator(m_edges[i]);
+            return NeighborIterator(m_edges.at(id));
         }
 
         void
-        addEdge(std::size_t first, std::size_t second, E payload)
+        addEdge(uint64_t first, uint64_t second, E payload)
         {
             m_edges[first].insert({ second, payload });
         }
 
         void
-        removeEdge(std::size_t first, std::size_t second)
+        removeEdge(uint64_t first, uint64_t second)
         {
             m_edges[first].erase(second);
         }
 
+        /**
+         * Filte all edges with a predicate.
+         */
         template <typename BinaryPredicate>
         void
         filter(BinaryPredicate pred)
         {
-            for (std::size_t i = 0; i < m_edges.size(); ++i)
+
+            for (auto out = m_edges.begin(); out != m_edges.end(); ++out)
             {
-                for (auto it = m_edges[i].begin(); it != m_edges[i].end();)
+                auto& edge = out->second;
+                for (auto it = edge.begin(); it != edge.end();)
                 {
-                    if (pred(i, it->first))
+                    if (pred(out->first, it->first))
                     {
                         ++it;
                     }
                     else
                     {
-                        it = m_edges[i].erase(it);
+                        it = edge.erase(it);
                     }
                 }
             }
         }
 
         void
-        addNode(std::size_t val)
+        addNode(uint64_t id)
         {
-            if (val >= m_edges.size())
-            {
-                m_edges.resize(val);
-            }
+            m_edges.insert({id, std::unordered_map<uint64_t, E>()});
         }
 
         void
-        removeNode(std::size_t val)
+        removeNode(std::size_t id)
         {
-            m_edges.erase(m_edges.begin() + val);
-            // every node with a value bigger than val must be reduced by 1. every node with value of val must be deleted.
-            // the easiest way is to create new maps
-            for (std::size_t i = 0; i < m_edges.size(); ++i)
-            {
-                auto& map = m_edges[i];
-                auto new_map = std::unordered_map<std::size_t, E>();
-                new_map.reserve(map.size());
-                for (auto iter = map.begin(); iter != map.end(); ++iter)
-                {
-                    auto key = iter->first;
-                    if (key == val)
-                    {
-                        continue;
-                    }
-                    else if (key > val)
-                    {
-                        --key;
-                    }
-                    new_map.insert({ key, iter->second });
-                }
-                m_edges[i] = new_map;
+            m_edges.erase(id);
+            for(auto& edge : m_edges){
+                edge.second.erase(id);
             }
         }
 
-        void
-        clearNode(std::size_t val)
-        {
-            m_edges[val].clear();
-            for (auto& map : m_edges)
-            {
-                map.erase(val);
-            }
-        }
-
-        void
-        replaceNodes(std::size_t left, std::size_t right)
-        {
-            m_edges[left] = m_edges[right];
-            for (auto& map : m_edges)
-            {
-                auto it = map.find(right);
-                if (it != map.end())
-                {
-                    // erase first to make sure that the iterator is still valid
-                    auto payload = it->second;
-                    map.erase(it);
-                    map.insert({ left, payload });
-                }
-            }
-        }
+        // void
+        // replaceNodes(std::size_t left, std::size_t right)
+        // {
+        //     m_edges[left] = m_edges[right];
+        //     for (auto& map : m_edges)
+        //     {
+        //         auto it = map.find(right);
+        //         if (it != map.end())
+        //         {
+        //             // erase first to make sure that the iterator is still valid
+        //             auto payload = it->second;
+        //             map.erase(it);
+        //             map.insert({ left, payload });
+        //         }
+        //     }
+        // }
 
         void
         clear()
@@ -222,17 +195,13 @@ namespace klenert
         bool
         hasNode(std::size_t node) const
         {
-            return node < m_edges.size();
+            return m_edges.contains(node);
         }
 
         bool
         hasEdge(std::size_t from, std::size_t to) const
         {
-            if (!hasNode(from))
-            {
-                return false;
-            }
-            return m_edges[from].find(to) != m_edges[from].end();
+            return m_edges.contains(from) && m_edges[from].contains(to);
         }
 
         std::optional<E>
@@ -242,23 +211,22 @@ namespace klenert
             {
                 return std::optional<E>();
             }
-            auto it = m_edges[from].find(to);
-            if (it == m_edges[from].end())
+            auto it = m_edges.at(from).find(to);
+            if (it == m_edges.at(from).end())
             {
                 return std::optional<E>();
             }
-            return m_edges[from].at(to);
-            // return *it;
+            return it->second;
         }
 
         E
         getEdgeUnsafe(std::size_t from, std::size_t to) const
         {
-            return m_edges[from].at(to);
+            return m_edges.at(from).at(to);
         }
 
     protected:
-        std::vector<std::unordered_map<std::size_t, E>> m_edges;
+        std::unordered_map<uint64_t,std::unordered_map<uint64_t, E>> m_edges;
     };
 
 } // namespace klenert

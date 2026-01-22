@@ -17,12 +17,14 @@ namespace surface {
     class SimpleTriangle {
     public:
         SimpleTriangle(std::array<std::size_t, 3> point_indices) : m_indices(point_indices){}
+        SimpleTriangle(std::size_t first, std::size_t second, std::size_t third) : m_indices({first, second, third}){}
+
         std::array<std::size_t, 3> toRaw() const {
             return m_indices;
         }
 
         SimpleTriangle map(const mutil::Permutation& perm) const {
-            return SimpleTriangle({perm[m_indices[0]], perm[m_indices[1]], perm[m_indices[2]]});
+            return SimpleTriangle(perm[m_indices[0]], perm[m_indices[1]], perm[m_indices[2]]);
         }
 
         bool operator==(const SimpleTriangle& rhs) const {
@@ -196,7 +198,7 @@ namespace surface {
         }
 
         void addTriangle(std::size_t point1, std::size_t point2, std::size_t point3){
-            m_triangles.push_back(SimpleTriangle({point1, point2, point3}));
+            m_triangles.push_back(SimpleTriangle(point1, point2, point3));
         }
 
         StaticSurface permutePoints(const mutil::Permutation& perm) const{
