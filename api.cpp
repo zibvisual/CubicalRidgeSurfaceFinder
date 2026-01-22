@@ -1,6 +1,5 @@
 #include "src/rsf/CubicalRidgeSurfaceFinder.h"
 
-
 namespace ridgesurface {
     class CubicalRidgeSurfaceFinder;
 }
@@ -195,7 +194,7 @@ extern "C" {
     }
 
     /**
-     * @brief Computes the surface using Fast Marching algorith and merges all the patches.
+     * @brief Computes the surface using Fast Marching algorithm and merges all the patches.
      * @param rsf Pointer to the `CubicalRidgeSurfaceFinder` object.
      * @return A pointer to a `Surface_C` struct containing the final computed surface data.
      */
@@ -212,4 +211,3 @@ extern "C" {
     }
 
 }
-
