@@ -13,6 +13,7 @@
 #include <io/metadata.hpp>
 #include <utils/Direction.hpp>
 #include <io/spatialinfo.hpp>
+#include <field/RawFieldView.hpp>
 
 /**
  * Fields are just values in some 3D space. If no value exist at a spot, we return None or some default value.
@@ -31,107 +32,24 @@ class RawField
 {
     // TODO: Tiled Field to allow for better cache locality? One Tile is of size 8x8x8?
 public:
-    class FieldLocation
-    {
-    public:
-        FieldLocation(VecSize location, Dims dims)
-            : m_index(location.z() * dims.x() * dims.y() + location.y() * dims.x() + location.x())
-        {
-            // check if we are in bounds!
-            if(location.x() < 0 || location.x() >= dims.x() || location.y() < 0 || location.y() >= dims.y() || location.z() < 0 || location.z() >= dims.z())
-            {
-                m_index = std::numeric_limits<uint64_t>::max();
-            }else{
-                m_index = location.z() * dims.x() * dims.y() + location.y() * dims.x() + location.x();
-            }
-        }
-
-        FieldLocation(VecInt location, Dims dims)
-        : m_index(std::numeric_limits<uint64_t>::max())
-        {
-            // check if we are in bounds!
-            if(location.x() < 0 || location.x() >= dims.x() || location.y() < 0 || location.y() >= dims.y() || location.z() < 0 || location.z() >= dims.z())
-            {
-                m_index = std::numeric_limits<uint64_t>::max();
-            }else{
-                m_index = static_cast<uint64_t>(location.z()) * dims.x() * dims.y() + static_cast<uint64_t>(location.y()) * dims.x() + static_cast<uint64_t>(location.x());
-            }
-        }
-
-        FieldLocation(uint64_t index)
-            : m_index(index)
-        {
-        }
-
-        // Empty FieldLocation (out of bounds)
-        FieldLocation()
-            : m_index(std::numeric_limits<uint64_t>::max())
-        {
-        }
-
-        bool operator==(const FieldLocation& rhs) const 
-        {
-            return m_index == rhs.m_index;
-        }
-
-        // THIS IS DANGEROUS (for empty field locations!)
-        VecSize location(Dims dims) const
-        {
-            const uint64_t z = m_index / (dims.y() * dims.x());
-            const uint64_t rest = m_index - z * (dims.y() * dims.x());
-            const uint64_t y = rest / dims.x();
-            const uint64_t x = rest - y * dims.x();
-            return VecSize(x, y, z);
-        }
-
-        uint64_t index() const
-        {
-            return m_index;
-        }
-
-        bool empty() const
-        {
-            return m_index == std::numeric_limits<uint64_t>::max();
-        }
-
-        bool valid() const
-        {
-            return m_index != std::numeric_limits<uint64_t>::max();
-        }
-
-    private:
-        uint64_t m_index;
-    };
-
-    using Location = FieldLocation;
+    using Location = typename RawFieldView<T>::Location;
+    using FieldLocation = typename RawFieldView<T>::FieldLocation;
 
     RawField()
     : m_data()
-    , m_lattice()
-    , m_dirty_vals(false)
-    , m_min_val(std::numeric_limits<T>::max())
-    , m_max_val(std::numeric_limits<T>::lowest())
-    , m_undefined_val(std::numeric_limits<T>::max())
+    , m_view(m_data.data(), Lattice())
     {}
 
     RawField(Dims dims)
     : m_data(std::vector<T>(dims.size(), T()))
-    , m_lattice(dims)
-    , m_dirty_vals(true)
-    , m_min_val(std::numeric_limits<T>::max())
-    , m_max_val(std::numeric_limits<T>::lowest())
-    , m_undefined_val(std::numeric_limits<T>::max())
+    , m_view(m_data.data(), dims)
     {
         //TODO: instead of dirty vals we could just update m_min_val and m_max_val
     }
 
     RawField(Lattice lattice)
     : m_data(std::vector<T>(lattice.dims().size(), T()))
-    , m_lattice(lattice)
-    , m_dirty_vals(true)
-    , m_min_val(std::numeric_limits<T>::max())
-    , m_max_val(std::numeric_limits<T>::lowest())
-    , m_undefined_val(std::numeric_limits<T>::max())
+    , m_view(m_data.data(), lattice)
     {
         //TODO: instead of dirty vals we could just update m_min_val and m_max_val
     }
@@ -141,11 +59,7 @@ public:
      */
     RawField(std::vector<T> data, Dims dims) 
     : m_data(data)
-    , m_lattice(dims)
-    , m_dirty_vals(true)
-    , m_min_val(std::numeric_limits<T>::max())
-    , m_max_val(std::numeric_limits<T>::lowest())
-    , m_undefined_val(std::numeric_limits<T>::max())
+    , m_view(m_data.data(), dims)
     {
     }
 
@@ -154,30 +68,12 @@ public:
      */
     RawField(std::vector<T> data, Lattice lattice) 
     : m_data(data)
-    , m_lattice(lattice)
-    , m_dirty_vals(true)
-    , m_min_val(std::numeric_limits<T>::max())
-    , m_max_val(std::numeric_limits<T>::lowest())
-    , m_undefined_val(std::numeric_limits<T>::max())
+    , m_view(m_data.data(), lattice)
     {
     }
 
     void save(std::string output_path){
-        npy::npy_data_ptr<T> data;
-        data.data_ptr = this->data();
-        data.shape = npy::shape_t(m_lattice.dims()[0], m_lattice.dims()[1], m_lattice.dims()[2]);
-        // fortran order is also inside of data (false currently...)
-        npy::write_npy(output_path, data);
-
-        const auto voxelsize = m_lattice.voxelsize();
-        const auto origin = m_lattice.origin();
-
-        metadata_t metadata;
-        metadata.keywords.push_back("voxelsize");
-        metadata.data.push_back({std::to_string(voxelsize[0]), std::to_string(voxelsize[1]), std::to_string(voxelsize[2])});
-        metadata.keywords.push_back("origin");
-        metadata.data.push_back({std::to_string(origin[0]), std::to_string(origin[1]), std::to_string(origin[2])});
-        write_metadata(output_path, metadata);
+        m_view.save(output_path);
     }
 
     static RawField load(std::string input_path){
@@ -210,122 +106,38 @@ public:
     /**
      * Returns index for the given location (might be empty)
      */
-    FieldLocation createLocation(VecSize location) const
+    Location createLocation(VecSize location) const
     {
-        if (m_lattice.dims().contains(location))
-        {
-            return FieldLocation(location, m_lattice.dims());
-        }
-        else
-        {
-            return FieldLocation();
-        }
+        return m_view.createLocation(location);
     }
 
     /**
      * Returns index for the given location (might be empty)
      */
-    FieldLocation createLocation(VecInt location) const
+    Location createLocation(VecInt location) const
     {
-        if (m_lattice.dims().contains(location))
-        {
-            return FieldLocation(location, m_lattice.dims());
-        }
-        else
-        {
-            return FieldLocation();
-        }
+        return m_view.createLocation(location);
     }
 
     /**
      * Returns index for the given location (might be empty)
      */
-    FieldLocation createLocation(VecFloat location) const
+    Location createLocation(VecFloat location) const
     {
-        // calculate location
-        auto grid = m_lattice.gridLocation(location);
-        return createLocation(grid);
+        return m_view.createLocation(location);
     }
 
     /**
      * Returns moved location (might be empty if out of bounds)
      */
-    FieldLocation moveLocation(FieldLocation location, Direction direction) const
+    Location moveLocation(Location location, Direction direction) const
     {
-        auto loc = location.location(m_lattice.dims());
-        switch (direction)
-        {
-        case Direction::LEFT:
-            if (loc[0] == 0)
-            {
-                return FieldLocation();
-            }
-            return FieldLocation(location.index() - 1);
-        case Direction::RIGHT:
-            if (loc[0] + 1 == m_lattice.dims()[0])
-            {
-                return FieldLocation();
-            }
-            return FieldLocation(location.index() + 1);
-        case Direction::UP:
-            if (loc[1] == 0)
-            {
-                return FieldLocation();
-            }
-            return FieldLocation(location.index() - m_lattice.dims()[0]);
-        case Direction::DOWN:
-            if (loc[1] + 1 == m_lattice.dims()[1])
-            {
-                return FieldLocation();
-            }
-            return FieldLocation(location.index() + m_lattice.dims()[0]);
-        case Direction::FORWARD:
-            if (loc[2] == 0)
-            {
-                return FieldLocation();
-            }
-            return FieldLocation(location.index() - m_lattice.dims()[0] * m_lattice.dims()[1]);
-        case Direction::BACKWARD:
-            if (loc[2] + 1 == m_lattice.dims()[2])
-            {
-                return FieldLocation();
-            }
-            return FieldLocation(location.index() + m_lattice.dims()[0] * m_lattice.dims()[1]);
-        default:
-            return FieldLocation();
-        }
+        return m_view.moveLocation(location, direction);
     }
 
-    std::array<FieldLocation, 6> gridNeighbors6(FieldLocation location) const
+    std::array<Location, 6> gridNeighbors6(Location location) const
     {
-        // do all cases of moveLocation
-        auto loc = location.location(m_lattice.dims());
-        std::array<FieldLocation, 6> res = {FieldLocation(), FieldLocation(), FieldLocation(), FieldLocation(), FieldLocation(), FieldLocation()};
-        if (loc[0] != 0)
-        {
-            res[0] = FieldLocation(location.index() - 1);
-        }
-        if (loc[0] + 1 != m_lattice.dims()[0])
-        {
-            res[1] = FieldLocation(location.index() + 1);
-        }
-        if (loc[1] != 0)
-        {
-            res[2] = FieldLocation(location.index() - m_lattice.dims()[0]);
-        }
-        if (loc[1] + 1 != m_lattice.dims()[1])
-        {
-            res[3] = FieldLocation(location.index() + m_lattice.dims()[0]);
-        }
-        if (loc[2] != 0)
-        {
-            res[4] = FieldLocation(location.index() - m_lattice.dims()[0] * m_lattice.dims()[1]);
-        }
-        if (loc[2] + 1 != m_lattice.dims()[2])
-        {
-            res[5] = FieldLocation(location.index() + m_lattice.dims()[0] * m_lattice.dims()[1]);
-        }
-        return res;
+        return m_view.gridNeighbors6(location);
     }
 
     /**
@@ -333,7 +145,7 @@ public:
      */
     std::optional<T> get(VecSize location) const
     {
-        return m_lattice.dims().contains(location) ? get_unchecked(location) : std::optional<T>();
+        return m_view.get(location);
     }
 
     /**
@@ -341,7 +153,7 @@ public:
      */
     T get_or(VecSize location) const
     {
-        return m_lattice.dims().contains(location) ? get_unchecked(location) : m_undefined_val;
+        return m_view.get_or(location);
     }
 
     /**
@@ -349,28 +161,22 @@ public:
      */
     T get_or(VecSize location, const T value) const
     {
-        return m_lattice.dims().contains(location) ? get_unchecked(location) : value;
+        return m_view.get_or(location, value);
     }
 
     T get_unchecked(VecSize location) const
     {
-        const auto dims = m_lattice.dims();
-        return m_data[location.z() * dims.x() * dims.y() + location.y() * dims.x() + location.x()];
+        return m_view.get_unchecked(location);
     }
 
     bool set(VecSize location, const T value)
     {
-        if(m_lattice.dims().contains(location)){
-            set_unchecked(location, value);
-            return true;
-        }
-        return false;
+        return m_view.set(location, value);
     }
 
     void set_unchecked(VecSize location, const T value)
     {
-        const auto dims = m_lattice.dims();
-        m_data[location.z() * dims.x() * dims.y() + location.y() * dims.x() + location.x()] = value;
+        m_view.set_unchecked(location, value);
     }
 
     /**
@@ -378,7 +184,7 @@ public:
      */
     std::optional<T> get(VecInt location) const
     {
-        return m_lattice.dims().contains(location) ? get_unchecked(location) : std::optional<T>();
+        return m_view.get(location);
     }
 
     /**
@@ -386,7 +192,7 @@ public:
      */
     T get_or(VecInt location) const
     {
-        return m_lattice.dims().contains(location) ? get_unchecked(location) : m_undefined_val;
+        return m_view.get_or(location);
     }
 
     /**
@@ -394,33 +200,28 @@ public:
      */
     T get_or(VecInt location, const T value) const
     {
-        return m_lattice.dims().contains(location) ? get_unchecked(location) : value;
+        return m_view.get_or(location, value);
     }
 
     T get_unchecked(VecInt location) const
     {
-        const auto dims = m_lattice.dims();
-        return m_data[static_cast<std::size_t>(location.z()) * dims.x() * dims.y() + static_cast<std::size_t>(location.y()) * dims.x() + static_cast<std::size_t>(location.x())];
+        return m_view.get_unchecked(location);
     }
 
     /**
      * Returns underlying value or NONE if out of bounds.
      */
-    std::optional<T> get(FieldLocation location) const
+    std::optional<T> get(Location location) const
     {
-        if (location.index() >= m_data.size())
-        {
-            return std::optional<T>();
-        }
-        return m_data[location.index()];
+        return m_view.get(location);
     }
 
     /**
      * Returns underlying value. Does NOT check for out of bounds.
      */
-    T get_unchecked(FieldLocation location) const
+    T get_unchecked(Location location) const
     {
-        return m_data[location.index()];
+        return m_view.get_unchecked(location);
     }
 
 
@@ -428,106 +229,74 @@ public:
 
     std::pair<T, T> getRange()
     {
-        if(m_dirty_vals){
-            calculateRange();
-        }
-        return std::pair<T,T>(m_min_val, m_max_val);
+        return m_view.getRange();
     }
 
     Dims getDims() const
     {
-        return m_lattice.dims();
+        return m_view.dims();
     }
 
     Dims
     dims() const
     {
-        return m_lattice.dims();
+        return m_view.dims();
     }
 
     /**
      * Resize field and fill with undefined value if necessary
      */
     void resize(Dims dims) {
-        m_data.resize(dims.size(), m_undefined_val);
-        m_lattice.setDims(dims);        
+        m_data.resize(dims.size(), m_view.getUndefinedValue());
+        m_view.resizedData(m_data.data(), dims, m_view.getUndefinedValue());    
     }
 
     void resize(Dims dims, T fillValue) {
-        if(fillValue == m_undefined_val){
-            return resize(dims);
-        }
-        // update min, max if necessary
-        if(!m_dirty_vals && m_data.size() < dims.size()){
-            if(fillValue < m_min_val){
-                m_min_val = fillValue;
-            }
-            if(m_max_val < fillValue){
-                m_max_val = fillValue;
-            }
-        }else if(!m_dirty_vals && dims.size() < m_data.size()){
-            m_dirty_vals = true;
-        }
         m_data.resize(dims.size(), fillValue);
-        m_lattice.setDims(dims);
+        m_view.resizedData(m_data.data(), dims, fillValue);
     }
 
     /**
      * Set all values to undefined Value
      */
     void fill() {
-        m_min_val = std::numeric_limits<T>::max();
-        m_max_val = std::numeric_limits<T>::lowest();
-        m_dirty_vals = false;
-        for(std::size_t i = 0; i < m_data.size(); ++i){
-            m_data[i] = m_undefined_val;
-        }
+        m_view.fill();
     }
 
     void fill(T fillValue) {
-        if(fillValue == m_undefined_val){
-            return fill();
-        }
-        m_min_val = fillValue;
-        m_max_val = fillValue;
-        m_dirty_vals = false;
-        for(std::size_t i = 0; i < m_data.size(); ++i){
-            m_data[i] = m_undefined_val;
-        }
+        m_view.fill(fillValue);
     }
 
     void setUndefinedValue(T undefinedValue) {
-        m_dirty_vals = true;
-        m_undefined_val = undefinedValue;
+        m_view.setUndefinedValue(undefinedValue);
     }
 
     T getUndefinedValue(){
-        return m_undefined_val;
+        return m_view.getUndefinedValue();
     }
 
     VecFloat getVoxelSize() const
     {
-        return m_lattice.voxelsize();
+        return m_view.lattice().voxelsize();
     }
 
     CornerBBox getCornerBoundingBox() const
     {
-        return m_lattice.cornerbox();
+        return m_view.lattice().cornerbox();
     }
 
     CenterBBox getCenterBoundingBox() const
     {
-        return m_lattice.centerbox();
+        return m_view.lattice().centerbox();
     }
 
     const Lattice& lattice() const
     {
-        return m_lattice;
+        return m_view.lattice();
     }
 
     T* data()
     {
-        m_dirty_vals = true;
         return m_data.data();
     }
 
@@ -537,42 +306,18 @@ public:
     }
 
     void setBBox(CornerBBox bbox) {
-        m_lattice.setBBox(bbox);
+        m_view.setBBox(bbox);
     }
 
     void setOrigin(VecFloat orig){
-        m_lattice.setOrigin(orig);
+        m_view.setOrigin(orig);
     }
 
     void setVoxelSize(VecFloat voxelsize){
-        m_lattice.setVoxelSize(voxelsize);
-    }
-    
-
-private:
-    void calculateRange()
-    {
-        m_min_val = std::numeric_limits<T>::max();
-        m_max_val = std::numeric_limits<T>::lowest();
-        for(auto i = 0; i < m_data.size(); ++i){
-            if(m_data[i] != m_undefined_val && m_data[i] < m_min_val){
-                m_min_val = m_data[i];
-            }
-            if(m_data[i] != m_undefined_val && m_data[i] > m_max_val){
-                m_max_val = m_data[i];
-            }
-        }
-        m_dirty_vals = false;
+        m_view.setVoxelSize(voxelsize);
     }
 
 private:
     std::vector<T> m_data;
-    Lattice m_lattice;
-
-    // cached values
-    mutable bool m_dirty_vals;
-    mutable T m_min_val;
-    mutable T m_max_val;
-    mutable T m_undefined_val;
-
+    RawFieldView<T> m_view;
 };
