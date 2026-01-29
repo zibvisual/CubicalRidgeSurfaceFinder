@@ -13,6 +13,8 @@ class VecSize;
 class VecInt
 {
 public:
+    using value_type = int;
+
     static const VecInt LEFT;
     static const VecInt RIGHT;
     static const VecInt UP;
@@ -63,6 +65,8 @@ private:
 class VecSize
 {
 public:
+    using value_type = std::size_t;
+
     VecSize() : m_values({0,0,0}) {}
     VecSize(std::size_t x) : m_values({x,x,x}) {}
     VecSize(std::size_t x, std::size_t y, std::size_t z) : m_values({x,y,z}) {}
@@ -96,6 +100,8 @@ private:
 class VecFloat
 {
 public:
+    using value_type = float;
+
     VecFloat() : m_values({0,0,0}) {}
     VecFloat(float x) : m_values({x,x,x}) {}
     VecFloat(float x, float y, float z) : m_values({x,y,z}) {}

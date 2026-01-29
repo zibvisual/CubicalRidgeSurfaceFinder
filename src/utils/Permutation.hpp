@@ -3,6 +3,8 @@
 #include <vector>
 #include <optional>
 #include <iostream>
+#include <nanoflann.hpp>
+#include <utils/PointCloudAdaptor.hpp>
 
 namespace mutil {
     class Permutation {
@@ -21,7 +23,7 @@ namespace mutil {
             for (std::size_t i = 0 ; i < index.size() ; ++i) {
                 index[i] = i;
             }
-            sort(index.begin(), index.end(),
+            std::sort(index.begin(), index.end(),
                 [&](const int& a, const int& b) {
                     return (data[a] < data[b]);
                 }
@@ -35,7 +37,7 @@ namespace mutil {
             for (std::size_t i = 0 ; i < index.size() ; ++i) {
                 index[i] = i;
             }
-            sort(index.begin(), index.end(), 
+            std::sort(index.begin(), index.end(), 
                 [&](const int& a, const int& b) {
                     return comp(data[a], data[b]);
                 }
@@ -81,6 +83,44 @@ namespace mutil {
             }
             auto map = trg_perm.apply(src_perm.inverse());
             return map;
+        }
+
+        template <class T>
+        static Permutation mapPermutationNearestNeighbor(std::vector<T> source, std::vector<T> target, T::value_type threshold = 0.0001){
+            if(source.size() != target.size()){
+                std::cout << "unequal number of elements" << std::endl;
+                return Permutation();
+            }
+            using pointcloud_t = PointCloudAdaptor<T>;
+            auto src_cloud = pointcloud_t(source);
+            auto tgt_cloud = pointcloud_t(target);
+
+            // find pairing source<->target <distance, dataset adaptor, dim>
+            using kd_tree_t = nanoflann::KDTreeSingleIndexAdaptor<nanoflann::L2_Simple_Adaptor<typename T::value_type, pointcloud_t>,pointcloud_t,3>;
+            kd_tree_t src_tree(3 /* dim (gets ignored because of template dim) */, src_cloud, {50 /* max leaf */});
+            kd_tree_t tgt_tree(3 /* dim (gets ignored because of template dim) */, tgt_cloud, {50 /* max leaf */});
+
+
+            auto perm = std::vector<std::size_t>();
+            perm.reserve(source.size());
+
+            uint32_t src_index;
+            uint32_t tgt_index;
+            typename T::value_type sqr_distance;
+            for(std::size_t i = 0; i < source.size(); ++i){
+                tgt_tree.knnSearch(&source[i][0], 1, &tgt_index, &sqr_distance);
+                if(sqr_distance > threshold){
+                    // matching distance threshold to big
+                    return Permutation();
+                }
+                src_tree.knnSearch(&target[tgt_index][0], 1, &src_index, &sqr_distance);
+                if(src_index != i){
+                    // there is no definite closest pair matching
+                    return Permutation();
+                }
+                perm.push_back(tgt_index);
+            }
+            return Permutation(perm);
         }
 
         std::size_t size() const {

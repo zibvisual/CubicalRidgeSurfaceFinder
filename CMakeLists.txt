@@ -31,6 +31,7 @@ add_library(rsflib STATIC ${SOURCES})
 target_include_directories(rsflib PUBLIC src)
 target_link_libraries(rsflib PUBLIC fmt::fmt-header-only)
 target_include_directories(rsflib PUBLIC includes/parallel-hashmap)
+target_include_directories(rsflib PUBLIC includes/nanoflann)
 target_include_directories(rsflib PRIVATE includes/eigen)
 
 # create main exec

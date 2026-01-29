@@ -131,19 +131,8 @@ namespace surface {
         // void replacePatch() --> ?
 
         mutil::Permutation mapEqualPoints(const StaticSurface& rhs, float epsilon = 0.0001) const {
-            // first check if we have the same amount of points
-            if(m_points.size() != rhs.m_points.size()){
-                return mutil::Permutation();
-            }
-
-            auto perm = mutil::Permutation::mapPermutation(m_points, rhs.m_points, 
-                [&](const VecFloat& a, const VecFloat& b) {
-                    return a.lexicographic_order_epsilon(b, epsilon);
-                }
-            );
-            return perm;
+            return mutil::Permutation::mapPermutationNearestNeighbor(m_points, rhs.m_points, epsilon);
         }
-
 
         mutil::Permutation mapEqualTriangles(const StaticSurface& rhs) const {
             auto perm = mutil::Permutation::mapPermutation(m_triangles, rhs.m_triangles, 
@@ -165,7 +154,6 @@ namespace surface {
 
             auto triangleMap = permutePoints(pointMap).mapEqualTriangles(rhs);
             if(triangleMap.empty()){
-                std::cout << "triangleMap null" << std::endl;
                 return false;
             }
             return true;
