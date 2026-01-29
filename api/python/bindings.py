@@ -23,6 +23,7 @@ class Surface(ctypes.Structure):
         ("num_points", ctypes.c_size_t),
         ("triangles", ctypes.POINTER(Triangle)), # Pointer to array of triangles
         ("num_triangles", ctypes.c_size_t),
+        ("surf_ptr", ctypes.c_void_p)
     ]
 
 

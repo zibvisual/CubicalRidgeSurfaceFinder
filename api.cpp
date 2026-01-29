@@ -24,6 +24,7 @@ struct Surface_C {
     size_t num_points;
     Triangle_C* triangles;
     size_t num_triangles;
+    surface::StaticSurface* surf_ptr;
 };
 
 extern "C" {
@@ -34,56 +35,51 @@ extern "C" {
      * @return A `Surface_C` object representing the same data from `StaticSurface`, 
      *         but in a C-compatible format.
      */
-    Surface_C surface_to_c(const surface::StaticSurface& s) {
-        Surface_C out;
-
-        out.num_points = s.points().size();
-        out.points = new VecFloat_C[out.num_points];
-
-        const auto& points = s.points();
-        // out.points = reinterpret_cast<VecFloat_C*>(const_cast<VecFloat*>(points.data()));
-        for (size_t i = 0; i < out.num_points; ++i) {
-            out.points[i].x = points[i].x();
-            out.points[i].y = points[i].y();
-            out.points[i].z = points[i].z();
-        }
-
-        out.num_triangles = s.number_of_trianlges();
-        out.triangles = new Triangle_C[out.num_triangles];
-
-        const auto& triangles = s.triangles();
-        // out.triangles = reinterpret_cast<Triangle_C*>(const_cast<surface::Triangle*>(triangles.data()));
-        for (size_t i = 0; i < out.num_triangles; ++i) {
-            out.triangles[i].v0 = triangles[i][0];
-            out.triangles[i].v1 = triangles[i][1];
-            out.triangles[i].v2 = triangles[i][2];
-        }
-
-        return out;
+    Surface_C surface_to_c(surface::StaticSurface* s) {
+        Surface_C out; 
+        out.num_points = s->points().size(); 
+        // out.points = new VecFloat_C[out.num_points]; 
+        const auto& points = s->points(); 
+        out.points = reinterpret_cast<VecFloat_C*>(const_cast<VecFloat*>(points.data())); 
+        // for (size_t i = 0; i < out.num_points; ++i) {
+        // out.points[i].x = points[i].x(); 
+        // out.points[i].y = points[i].y(); 
+        // out.points[i].z = points[i].z(); 
+        // } 
+        out.num_triangles = s->number_of_trianlges(); 
+        // out.triangles = new Triangle_C[out.num_triangles]; 
+        const auto& triangles = s->triangles(); 
+        out.triangles = reinterpret_cast<Triangle_C*>(const_cast<surface::SimpleTriangle*>(triangles.data())); 
+        // for (size_t i = 0; i < out.num_triangles; ++i) { 
+        // out.triangles[i].v0 = triangles[i][0]; 
+        // out.triangles[i].v1 = triangles[i][1]; 
+        // out.triangles[i].v2 = triangles[i][2]; 
+        // } 
+        out.surf_ptr = s; 
+        return out; 
     }
 
 
     /**
-     * @brief Frees the memory allocated for a `Surface_C` object.
+     * @brief Frees the memory allocated for a `Surface_C` object and 
+     * for a `StaticSurface` object (if exists).
      * @param s A pointer to a `Surface_C` object whose memory will be freed.
      */
     void free_surface(Surface_C* s) {
         if (!s) return;
 
-        delete[] s->points;
-        delete[] s->triangles;
-
-        s->points = nullptr;
-        s->triangles = nullptr;
-        s->num_points = 0;
-        s->num_triangles = 0;
+        if (s->surf_ptr) {
+            delete s->surf_ptr;
+            s->surf_ptr = nullptr;
+        } 
+        delete s;
     }
 
     /**
      * @brief Constructor for `CubicalRidgeSurfaceFinder` class .
      */ 
     ridgesurface::CubicalRidgeSurfaceFinder* CRSF_new() { 
-        auto* progress = new progressbar::Progressbar(); // This is needed by the constructor
+        auto* progress = new progressbar::Progressbar(); // This leads to small memory leak
         auto* rsf = new ridgesurface::CubicalRidgeSurfaceFinder(*progress);
         return rsf;
     }
@@ -108,7 +104,7 @@ extern "C" {
         std::vector<float> vec(data, data + width * height * depth);
 
         // Create a Rawfield object with the image data and specified dimensions.
-        RawField<float>* raw = new RawField<float>(vec, Dims(width, height, depth));
+        RawField<float>* raw = new RawField<float>(vec, Dims(width, height, depth)); // Memory leak
 
         // Set the RawField object as the input data.
         rsf->setInput(&raw->get_view());
@@ -200,8 +196,15 @@ extern "C" {
      */
     Surface_C* CRSF_compute_finalize(ridgesurface::CubicalRidgeSurfaceFinder* rsf) {
         rsf->calculate();
-        surface::StaticSurface surface;
-        rsf->finalize(&surface);
+        // surface::StaticSurface surface;
+        // rsf->finalize(&surface);
+
+        // // Convert to a `Surface_C` struct
+        // Surface_C* out = new Surface_C;
+        // *out = surface_to_c(surface);
+        
+        surface::StaticSurface* surface = new surface::StaticSurface;
+        rsf->finalize(surface);
 
         // Convert to a `Surface_C` struct
         Surface_C* out = new Surface_C;
