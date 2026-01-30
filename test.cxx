@@ -134,7 +134,7 @@ TEST_CASE("Fast Marching", "[fm]")
         auto dist_view = mutil::ArrayMappingView<uint64_t,float>(dist.data(), dist.getDims().size());
         fastmarching::FastMarching<fastmarching::ObserverAll<mutil::ArrayMappingView<uint64_t, float>, BigHashSet<uint64_t>>> fm(progress);
         // start fm from the top left (0,0,0)
-        fm.data(&pot, time_view, dist_view);
+        fm.data(&pot.get_view(), time_view, dist_view);
         fm.thresholds(0.0f,1.0f);
         fm.setStartVoxel(0);
         fm.march();
@@ -159,7 +159,7 @@ TEST_CASE("Fast Marching", "[fm]")
         // using MappingView = mutil::HashMapMappingView<SmallHashMap<int64_t, float>>;
         // fastmarching::FastMarching<fastmarching::ObserverDistance<MappingView>> m_fm;
         fastmarching::FastMarching<fastmarching::ObserverDistance<mutil::HashMapMappingView<SmallHashMap<int64_t, float>>>> fm(progress);
-        fm.data(&pot);
+        fm.data(&pot.get_view());
         fm.thresholds(0.5f,1.5f);
         fm.setStartPoint(VecFloat(5.f));
         fm.march();
@@ -354,7 +354,7 @@ TEST_CASE("Ridge Surface Finder", "[rsf]")
         REQUIRE(img.dims() == Dims(10));
         REQUIRE(img.getCornerBoundingBox() == CornerBBox::fromCenterBBox(VecFloat(0.f), VecFloat(9.f), img.dims()));
 
-        m_finder.setInput(&img);
+        m_finder.setInput(&img.get_view());
         m_finder.addSeed(ridgesurface::Seed::Seedpoint(VecFloat(5.f), 50.0f));
         m_finder.setThresholds(0.5f,1.5f);
         m_finder.calculate();

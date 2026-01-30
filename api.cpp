@@ -111,7 +111,7 @@ extern "C" {
         RawField<float>* raw = new RawField<float>(vec, Dims(width, height, depth));
 
         // Set the RawField object as the input data.
-        rsf->setInput(raw);
+        rsf->setInput(&raw->get_view());
     }
 
     /**

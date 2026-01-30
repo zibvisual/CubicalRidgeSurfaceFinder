@@ -15,21 +15,11 @@
 #include <io/spatialinfo.hpp>
 
 /**
- * Fields are just values in some 3D space. If no value exist at a spot, we return None or some default value.
- * If we are out of bounds, we also return None or some default.
- * We might want to discern between OutOfBox and NoValue. -> Field only knows NoValue and Value
- * a bounding box has a default background value if pos is inside box.
- * Neighbors are calculated with the help of the bounding box to check if they are still inside the field?
- */
-
-
-/**
- * Each Field may use its own FieldLocation. Each Field is responsible for indexing, bounds checking and moving locations
+ * RawFieldView is a view into a contiguous dataset. The data is not owned by RawFieldView and is not freed by RawFieldView.
  */
 template <typename T>
 class RawFieldView
 {
-    // TODO: Tiled Field to allow for better cache locality? One Tile is of size 8x8x8?
 public:
     class FieldLocation
     {
@@ -368,7 +358,7 @@ public:
 
     /** --------------------------------------------------------------------------- */
 
-    std::pair<T, T> getRange()
+    std::pair<T, T> getRange() const
     {
         if(m_dirty_vals){
             calculateRange();
@@ -481,7 +471,7 @@ public:
     
 
 private:
-    void calculateRange()
+    void calculateRange() const
     {
         m_min_val = std::numeric_limits<T>::max();
         m_max_val = std::numeric_limits<T>::lowest();
@@ -499,11 +489,11 @@ private:
 private:
     T* m_data;
     Lattice m_lattice;
-
+    
+    T m_undefined_val;
     // cached values
     mutable bool m_dirty_vals;
     mutable T m_min_val;
     mutable T m_max_val;
-    mutable T m_undefined_val;
 
 };

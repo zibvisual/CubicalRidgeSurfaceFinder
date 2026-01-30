@@ -72,6 +72,13 @@ public:
     {
     }
 
+    /**
+     * Get a view into RawField
+     */
+    const RawFieldView<T>& get_view() const{
+        return m_view;
+    }
+
     void save(std::string output_path){
         m_view.save(output_path);
     }

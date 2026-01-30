@@ -47,7 +47,7 @@ namespace ridgesurface
         CubicalRidgeSurfaceFinder(progressbar::Progressbar& progress);
         ~CubicalRidgeSurfaceFinder(void);
 
-        void setInput(RawField<float>* probability);
+        void setInput(const RawFieldView<float>* probability);
         void setThresholds(float min, float max);
         float getMin();
         float getMax();
@@ -194,7 +194,7 @@ namespace ridgesurface
         RawField<std::size_t> m_cum_label;
 
         // Input and Outputs
-        RawField<float>* m_probability;
+        const RawFieldView<float>* m_probability;
         RawField<float> m_cum_time;
         RawField<float> m_cum_distance;
 

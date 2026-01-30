@@ -86,7 +86,7 @@ namespace ridgesurface
     }
 
     void
-    CubicalRidgeSurfaceFinder::setInput(RawField<float>* probability)
+    CubicalRidgeSurfaceFinder::setInput(const RawFieldView<float>* probability)
     {
         m_probability = probability;
         if(probability){
@@ -1196,7 +1196,7 @@ namespace ridgesurface
 
         // get tensor of pointId
         // TODO: we want to allow more than just float values!
-        float* inputData = static_cast<float*>(m_probability->data());
+        const float* inputData = m_probability->data();
         Eigen::Matrix3f tensor = structure_tensor(inputData, m_lattice.dims(), static_cast<VecInt>(gridPoint), gradient_sigma, tensor_sigma);
 
 

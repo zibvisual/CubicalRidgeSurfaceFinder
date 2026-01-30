@@ -163,7 +163,7 @@ int main(int argc, char *argv[])
 
         auto progressbar = progressbar::Progressbar(progressbar::ProgressbarReportLevel::FullReport);
         ridgesurface::CubicalRidgeSurfaceFinder m_finder(progressbar);
-        m_finder.setInput(&img);
+        m_finder.setInput(&img.get_view());
         m_finder.newSeeds(seeds);
         m_finder.setThresholds(min,max);
         m_finder.recalculate();
