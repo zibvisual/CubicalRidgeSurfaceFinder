@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <optional>
 #include "Vec.hpp"
 
 class Dims
@@ -72,6 +73,22 @@ public:
 
     bool operator==(const Dims& rhs) const {
         return m_x == rhs.m_x && m_y == rhs.m_y && m_z == rhs.m_z;
+    }
+
+    size_t c_index_unsafe(int x, int y, int z) const {
+        return static_cast<size_t>(z) * m_x * m_y + static_cast<size_t>(y) * m_x + static_cast<size_t>(x);
+    }
+
+    std::optional<size_t> c_index(int x, int y, int z) const {
+        return contains(x,y,z) ? std::optional<size_t>(c_index_unsafe(x,y,z)) : std::nullopt;
+    }
+
+    size_t c_index_unsafe(size_t x, size_t y, size_t z) const {
+        return z * m_x * m_y + y * m_x + x;
+    }
+
+    std::optional<size_t> c_index(size_t x, size_t y, size_t z) const {
+        return contains(x,y,z) ? std::optional<size_t>(c_index_unsafe(x,y,z)) : std::nullopt;
     }
 
     // VecFloat operator*(VecFloat const& v){

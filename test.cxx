@@ -21,6 +21,7 @@
 #include <rsf/FacesToCubicalMesh.hpp>
 
 #include <utils/Permutation.hpp>
+#include <utils/SeedSampler.hpp>
 
 #include <rsf/CubicalRidgeSurfaceFinder.h>
 #include <io/vertexset.hpp>
@@ -334,10 +335,31 @@ TEST_CASE("Face to Surface", "[face]")
     REQUIRE(surf.equals(ref));
 }
 
-// TEST_CASE("Change Graph", "[graph]")
-// {
-//     //TODO: Test change graph
-// }
+TEST_CASE("Union Find", "[seed]")
+{
+    auto uf = UnionFind(15);
+    uf.join(0,1);
+    uf.join(0,2);
+    REQUIRE(uf.find(1) == 0);
+    REQUIRE(uf.find(2) == 0);
+}
+
+TEST_CASE("Seedpoint Sampler", "[seed]")
+{
+    auto img = RawField<float>::load(__DATAPATH__+"/volumes/grayimage01_333");
+
+    auto seeds = sample(img.data(), img.dims(), 0.5f);
+    std::vector<uint32_t> expected = {25};
+    REQUIRE_THAT(seeds, UnorderedEquals(expected));
+
+    seeds = sample(img.data(), img.dims(), 0.6f);
+    expected = {2, 20, 25};
+    REQUIRE_THAT(seeds, UnorderedEquals(expected));
+
+    seeds = sample(img.data(), img.dims(), 0.7f);
+    expected = {4, 17, 20, 25};
+    REQUIRE_THAT(seeds, UnorderedEquals(expected));
+}
 
 // TEST_CASE("Flooding", "[flood]")
 // {
