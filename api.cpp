@@ -1,4 +1,5 @@
 #include "src/rsf/CubicalRidgeSurfaceFinder.h"
+#include "src/utils/SeedSampler.hpp"
 
 namespace ridgesurface {
     class CubicalRidgeSurfaceFinder;
@@ -25,6 +26,15 @@ struct Surface_C {
     Triangle_C* triangles;
     size_t num_triangles;
     surface::StaticSurface* surf_ptr;
+};
+
+// Class for handling memory
+struct CRSF_Handle {
+    progressbar::Progressbar* progress;
+    ridgesurface::CubicalRidgeSurfaceFinder* rsf;
+    RawFieldView<float>* raw;
+    VecFloat* points;
+    size_t n_points;
 };
 
 extern "C" {
@@ -76,79 +86,168 @@ extern "C" {
     }
 
     /**
-     * @brief Constructor for `CubicalRidgeSurfaceFinder` class .
+     * @brief Constructor for `CubicalRidgeSurfaceFinder` and `CRSF_Handle` classes.
+     * @return Pointer to the `CRSF_Handle` object.
      */ 
-    ridgesurface::CubicalRidgeSurfaceFinder* CRSF_new() { 
-        auto* progress = new progressbar::Progressbar(); // This leads to small memory leak
+    CRSF_Handle* CRSF_new() { 
+        auto* progress = new progressbar::Progressbar();
         auto* rsf = new ridgesurface::CubicalRidgeSurfaceFinder(*progress);
-        return rsf;
+
+        CRSF_Handle* h = new CRSF_Handle();
+        h->progress = progress;
+        h->rsf = rsf;
+        h->raw = nullptr;
+        h->points = nullptr;
+        h->n_points = 0;
+        return h;
     }
 
     /**
-     * @brief Destructor for `CubicalRidgeSurfaceFinder` class.
-     * @param rsf A pointer to the `CubicalRidgeSurfaceFinder` object.
+     * @brief Destructor for `CRSF_Handle` object. It also deletes the `RawfieldView`, 
+     * `Progressbar` and `CubicalRidgeSurfaceFinder` objects.
+     * @param h A pointer to the `CRSF_Handle` object.
      */ 
-    void CRSF_delete(ridgesurface::CubicalRidgeSurfaceFinder* rsf) {
-        delete rsf;
+    void CRSF_delete(CRSF_Handle* h) {
+    if (!h) return;
+
+    if (h->raw) {
+        delete h->raw;
+        h->raw = nullptr;
     }
+
+    if (h->rsf) {
+        delete h->rsf;
+        h->rsf = nullptr;
+    }
+
+    if (h->progress) {
+        delete h->progress;
+        h->progress = nullptr;
+    }
+
+    if (h->points) {
+        delete h->points;
+        h->points = nullptr;
+    }
+
+    if (h->n_points) {
+        h->n_points = 0;
+    }
+
+    delete h;
+}
 
     /**
      * @brief Set the input image for a `CubicalRidgeSurfaceFinder` object.
-     * @param rsf A pointer to the `CubicalRidgeSurfaceFinder` object.
+     * @param h A pointer to the `CRSF_Handle` object.
      * @param data A pointer to a 1D array containing the image data.
      * @param width, height, depth Dimensions of the input image (in voxels).
      */ 
-    void CRSF_setImage(ridgesurface::CubicalRidgeSurfaceFinder* rsf, float* data, int width, int height, int depth) {
+    void CRSF_setImage(CRSF_Handle* h, float* data, int width, int height, int depth) {
 
-        // Create a 1D vector that copies the 'data' array.
-        std::vector<float> vec(data, data + width * height * depth);
+        if (!h) return;
 
-        // Create a Rawfield object with the image data and specified dimensions.
-        RawField<float>* raw = new RawField<float>(vec, Dims(width, height, depth)); // Memory leak
+        // Delete old raw if exists
+        if (h->raw) delete h->raw;
 
-        // Set the RawField object as the input data.
-        rsf->setInput(&raw->get_view());
+        //std::vector<float> vec(data, data + width * height * depth);
+        h->raw = new RawFieldView<float>(data, Dims(width, height, depth));
+
+        h->rsf->setInput(h->raw);
     }
 
     /**
      * @brief Sets the minimum and maximum threshold for a `CubicalRidgeSurfaceFinder`.
-     * @param rsf Pointer to the `CubicalRidgeSurfaceFinder` object.
+     * @param h Pointer to the `CRSF_Handle` object.
      * @param min Minimum threshold value.
      * @param max Maximum threshold value.
      */
-    void CRSF_setThreshold(ridgesurface::CubicalRidgeSurfaceFinder* rsf, float min, float max) {
-        rsf->setThresholds(min, max);
+    void CRSF_setThreshold(CRSF_Handle* h, float min, float max) {
+        h->rsf->setThresholds(min, max);
     }
 
     /**
      * @brief Gets the minimum threshold for a `CubicalRidgeSurfaceFinder.
-     * @param rsf Pointer to the `CubicalRidgeSurfaceFinder` object.
+     * @param h Pointer to the `CRSF_Handle` object.
      * @return The minimum threshold value.
      */
-    float CRSF_getMinThreshold(ridgesurface::CubicalRidgeSurfaceFinder* rsf) {
-        return rsf->getMin();
+    float CRSF_getMinThreshold(CRSF_Handle* h) {
+        return h->rsf->getMin();
     }
+
     /**
      * @brief Gets the maximum threshold for a `CubicalRidgeSurfaceFinder` object.
-     * @param rsf Pointer to the `CubicalRidgeSurfaceFinder` object.
+     * @param h Pointer to the `CRSF_Handle` object.
      * @return The maximum threshold value.
      */
-    float CRSF_getMaxThreshold(ridgesurface::CubicalRidgeSurfaceFinder* rsf) {
-        return rsf->getMax();
+    float CRSF_getMaxThreshold(CRSF_Handle* h) {
+        return h->rsf->getMax();
+    }
+
+    /**
+     * @brief Generates sample points to use as seed points in CRSF. 
+     * It chooses the voxel with the highest value for each conected graph.
+     * @param h Pointer to the `CRSF_Handle` object.
+     * @param data A pointer to a 1D array containing the image or distance map data.
+     * @param width, height, depth Dimensions of the input image (in voxels).
+     * @param threshold Threshold for a voxel to be considered as a candidate seed.
+     * @param vsize Voxel size for each vertex.
+     */
+    void CRSF_seedSampler(CRSF_Handle* h, const float* data, int width, int height,
+                          int depth, float threshold, float vsize)
+    {
+        delete[] h->points;
+        h->points = nullptr;
+
+        Dims dims(width, height, depth);
+
+        std::vector<uint32_t> result = sample(data, dims, threshold);
+
+        h->n_points = result.size();
+        if (h->n_points == 0)
+            return;
+
+        h->points = new VecFloat[result.size()];
+
+        for (std::size_t i = 0; i < result.size(); ++i) {
+            VecSize gridLoc = Lattice::gridLocationFromCIndex(result[i], dims);
+            h->points[i] = VecFloat(
+                static_cast<float>(gridLoc.x()),
+                static_cast<float>(gridLoc.y()),
+                static_cast<float>(gridLoc.z())
+            );
+        }
+    }
+
+    /**
+     * @brief Gets the pointer to the seed points array obtained by `seedSampler()`.
+     * @param h Pointer to the `CRSF_Handle` object.
+     * @return Pointer to a VecFloat array.
+     */
+    const VecFloat* CRSF_getSeedPoints(CRSF_Handle* h) {
+        return h->points;
+    }
+    /**
+     * @brief Gets the number of seeds obtained by `seedSampler()`.
+     * @param h Pointer to the `CRSF_Handle` object.
+     * @return Number of seeds obtained by `seedSampler()`.
+     */
+    size_t CRSF_getSeedCount(CRSF_Handle* h) {
+        return h->n_points;
     }
 
     /**
      * @brief Adds a seed point for the `CubicalRidgeSurfaceFinder`.
-     * @param rsf Pointer to the `CubicalRidgeSurfaceFinder` object.
+     * @param h Pointer to the `CRSF_Handle` object.
      * @param x, y, z The coordinates of the seed point in the 3D lattice.
      * @param distance The maximum distance to propagate during the Fast Marching algorithm.
      */
-    void CRSF_addSeed(ridgesurface::CubicalRidgeSurfaceFinder* rsf, float x, float y, float z, float distance) {
+    void CRSF_addSeed(CRSF_Handle* h, float x, float y, float z, float distance) {
 
         ridgesurface::SeedPoint sp(VecFloat(x, y, z));
         ridgesurface::Seed seed(sp, distance);
 
-        rsf->addSeed(seed);
+        h->rsf->addSeed(seed);
     }
 
     /**
@@ -158,23 +257,24 @@ extern "C" {
      * relative distance to the previously existing seeds. The selected seed point is then added 
      * to the list of seed points for the surface finding algorithm.
      * 
+     * @param h Pointer to the `CRSF_Handle` object.
      * @param minDistanceRel The minimum relative distance required to consider a candidate as a valid seed point.
      * @param maxDistanceNewSeed The maximum distance to propagate during the Fast Marching algorithm by the new seed.
      * 
      * @return The index of the seed point in the candidate list, or -1 if no valid seed was found. 
      *         A valid seed is one with a relative distance greater than `minDistanceRel`.
      */
-    int CRSF_addAutomaticSeeds(ridgesurface::CubicalRidgeSurfaceFinder* rsf, float minDistanceRel, float maxDistanceNewSeed) {
-        return rsf->addSeed(minDistanceRel, maxDistanceNewSeed).value_or(-1);
+    int CRSF_addAutomaticSeeds(CRSF_Handle* h, float minDistanceRel, float maxDistanceNewSeed) {
+        return h->rsf->addSeed(minDistanceRel, maxDistanceNewSeed).value_or(-1);
     }
 
     /**
      * @brief Clears all seed points from a `CubicalRidgeSurfaceFinder` object.
      *
-     * @param rsf Pointer to the `CubicalRidgeSurfaceFinder` object.
+     * @param h Pointer to the `CRSF_Handle` object.
      */
-    void CRSF_clearSeedPoints(ridgesurface::CubicalRidgeSurfaceFinder* rsf) {
-        rsf->clearSeeds();
+    void CRSF_clearSeedPoints(CRSF_Handle* h) {
+        h->rsf->clearSeeds();
     }
 
     /**
@@ -182,20 +282,28 @@ extern "C" {
      * 
      * This function clears any previous surface data, including seed points and surface patches,
      * and then recalculates the ridge surface patches based on the current seeds.
-     * 
+     * @param h Pointer to the `CRSF_Handle` object.
      * @return The number of processed seeds (either the last index if interrupted or the total number of seeds).
      */
-    void CRSF_recalculate(ridgesurface::CubicalRidgeSurfaceFinder* rsf) {
-        rsf->recalculate();
+    void CRSF_recalculate(CRSF_Handle* h) {
+        h->rsf->recalculate();
+    }
+
+    /**
+     * @brief Computes the surface using Fast Marching algorithm;
+     * @param h Pointer to the `CRSF_Handle` object.
+     */
+    void CRSF_compute(CRSF_Handle* h) {
+        h->rsf->calculate();
     }
 
     /**
      * @brief Computes the surface using Fast Marching algorithm and merges all the patches.
-     * @param rsf Pointer to the `CubicalRidgeSurfaceFinder` object.
+     * @param h Pointer to the `CRSF_Handle` object.
      * @return A pointer to a `Surface_C` struct containing the final computed surface data.
      */
-    Surface_C* CRSF_compute_finalize(ridgesurface::CubicalRidgeSurfaceFinder* rsf) {
-        rsf->calculate();
+    Surface_C* CRSF_compute_finalize(CRSF_Handle* h) {
+        h->rsf->calculate();
         // surface::StaticSurface surface;
         // rsf->finalize(&surface);
 
@@ -204,7 +312,7 @@ extern "C" {
         // *out = surface_to_c(surface);
         
         surface::StaticSurface* surface = new surface::StaticSurface;
-        rsf->finalize(surface);
+        h->rsf->finalize(surface);
 
         // Convert to a `Surface_C` struct
         Surface_C* out = new Surface_C;

@@ -1,4 +1,5 @@
 import ctypes
+import numpy as np
 
 # Structure for points
 class VecFloat(ctypes.Structure):
@@ -16,6 +17,10 @@ class Triangle(ctypes.Structure):
         ("v2", ctypes.c_size_t),
     ]
 
+# Incomplete class for `StaticSurface`
+class StaticSurface(ctypes.Structure):
+    pass
+
 # Structure for surfaces
 class Surface(ctypes.Structure):
     _fields_ = [
@@ -23,11 +28,10 @@ class Surface(ctypes.Structure):
         ("num_points", ctypes.c_size_t),
         ("triangles", ctypes.POINTER(Triangle)), # Pointer to array of triangles
         ("num_triangles", ctypes.c_size_t),
-        ("surf_ptr", ctypes.c_void_p)
+        ("surf_ptr", ctypes.POINTER(StaticSurface))
     ]
 
-
-# Incomplete class for `CubicalRidgeSurfaceFinder`
+# Incomplete class for handling `CubicalRidgeSurfaceFinder`
 class CRSF(ctypes.Structure):
     pass
 
@@ -79,6 +83,15 @@ class CubicalRidgeSurfaceFinderAPI:
 
         self.lib.CRSF_getMaxThreshold.argtypes = [CRSF_p]
         self.lib.CRSF_getMaxThreshold.restype = ctypes.c_float
+
+        self.lib.CRSF_seedSampler.argtypes = [CRSF_p, ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.c_int,
+                                              ctypes.c_int, ctypes.c_float, ctypes.c_float]
+        
+        self.lib.CRSF_getSeedPoints.argtypes = [CRSF_p]
+        self.lib.CRSF_getSeedPoints.restype = ctypes.POINTER(VecFloat)
+
+        self.lib.CRSF_getSeedCount.argtypes = [CRSF_p]
+        self.lib.CRSF_getSeedCount.restype = ctypes.c_size_t
 
         self.lib.CRSF_addSeed.argtypes = [CRSF_p, ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float]
 
@@ -187,6 +200,44 @@ class CubicalRidgeSurfaceFinderAPI:
             return self.lib.CRSF_getMaxThreshold(crsf_p)
         except Exception as e:
             raise RuntimeError(f"Error getting the maximum threshold: {e}")
+    
+    def seed_sampler(self, crsf_p, data, width, height, depth, threshold, vsize):
+        """
+        Generate sample points to use as seed points in CRSF. 
+        It chooses the voxel with the highest value for each conected graph.
+        
+        :param crsf_p: Pointer to the `CubicalRidgeSurfaceFinder` instance.
+        :param data: A pointer to a 1D array containing the image or distance map data.
+        :param width: Width of the image in voxels.
+        :param height: Height of the image in voxels.
+        :param depth: Depth of the image in voxels.
+        :param threshold: Threshold for a voxel to be considered as a candidate seed.
+        :param vsize: Voxel size for each vertex.
+        :raises RuntimeError: If generating seed points fails.
+        """
+        try:
+            self.lib.CRSF_seedSampler(crsf_p, data, width, height, depth, threshold, vsize)
+        except Exception as e:
+            raise RuntimeError(f"Error generating seed points: {e}")
+
+    def get_seeds(self, crsf_p):
+        """
+        Gets the list of seeds as a numpy.ndarray.
+
+        :param crsf_p: Pointer to the `CubicalRidgeSurfaceFinder` instance.
+        :return: (N, 3) numpy array of seed points (x, y, z) in world coordinates.
+        """
+        try:
+            ptr = self.lib.CRSF_getSeedPoints(crsf_p)
+            count = self.lib.CRSF_getSeedCount(crsf_p)
+
+            # Convert pointer to numpy array
+            arr_type = VecFloat * count
+            arr = ctypes.cast(ptr, ctypes.POINTER(arr_type)).contents
+            
+            return np.array([(p.x, p.y, p.z) for p in arr], dtype=np.float32)
+        except Exception as e:
+            raise RuntimeError(f"Error getting the list of seed points: {e}")
 
     def add_seed(self, crsf_p, x, y, z, distance):
         """
@@ -244,6 +295,18 @@ class CubicalRidgeSurfaceFinderAPI:
             self.lib.CRSF_recalculate(crsf_p)
         except Exception as e:
             raise RuntimeError(f"Error recalculating ridge surface: {e}")
+        
+    def compute(self, crsf_p):
+        """
+        Computes the surface using Fast Marching algorithm.
+        
+        :param crsf_p: Pointer to the `CubicalRidgeSurfaceFinder` instance.
+        :raises RuntimeError: If the computation fails.
+        """
+        try:
+            return self.lib.CRSF_compute(crsf_p)
+        except Exception as e:
+            raise RuntimeError(f"Error computing ridge surface: {e}")
 
     def compute_finalize(self, crsf_p):
         """
@@ -255,4 +318,4 @@ class CubicalRidgeSurfaceFinderAPI:
         try:
             return self.lib.CRSF_compute_finalize(crsf_p)
         except Exception as e:
-            raise RuntimeError(f"Error computing ridge surface: {e}")
+            raise RuntimeError(f"Error computing or merging surface: {e}")
