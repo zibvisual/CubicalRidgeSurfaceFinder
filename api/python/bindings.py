@@ -71,6 +71,13 @@ class CubicalRidgeSurfaceFinderAPI:
             ctypes.POINTER(ctypes.c_float),   
             ctypes.c_int, ctypes.c_int, ctypes.c_int 
         ]
+        
+        self.lib.CRSF_setImage_bbox.argtypes = [
+            CRSF_p,
+            ctypes.POINTER(ctypes.c_float),   
+            ctypes.c_int, ctypes.c_int, ctypes.c_int,
+            VecFloat, VecFloat
+        ]
 
         self.lib.CRSF_setThreshold.argtypes = [
             CRSF_p,
@@ -84,14 +91,7 @@ class CubicalRidgeSurfaceFinderAPI:
         self.lib.CRSF_getMaxThreshold.argtypes = [CRSF_p]
         self.lib.CRSF_getMaxThreshold.restype = ctypes.c_float
 
-        self.lib.CRSF_seedSampler.argtypes = [CRSF_p, ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.c_int,
-                                              ctypes.c_int, ctypes.c_float, ctypes.c_float]
-        
-        self.lib.CRSF_getSeedPoints.argtypes = [CRSF_p]
-        self.lib.CRSF_getSeedPoints.restype = ctypes.POINTER(VecFloat)
-
-        self.lib.CRSF_getSeedCount.argtypes = [CRSF_p]
-        self.lib.CRSF_getSeedCount.restype = ctypes.c_size_t
+        self.lib.CRSF_seedSampler.argtypes = [CRSF_p, ctypes.c_float, ctypes.c_float]
 
         self.lib.CRSF_addSeed.argtypes = [CRSF_p, ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float]
 
@@ -160,6 +160,26 @@ class CubicalRidgeSurfaceFinderAPI:
             self.lib.CRSF_setImage(crsf_p, image, width, height, depth)
         except Exception as e:
             raise ValueError(f"Error setting the image: {e}")
+        
+    def set_image_bbox(self, crsf_p, image, width, height, depth, origin, vsize):
+        """
+        Sets the input image for the `CubicalRidgeSurfaceFinder` with a bounding box.
+
+        :param crsf_p: Pointer to the `CubicalRidgeSurfaceFinder` instance.
+        :param image: Pointer to the image data (1D array of floats).
+        :param width: Width of the image in voxels.
+        :param height: Height of the image in voxels.
+        :param depth: Depth of the image in voxels.
+        :param origin: Image origin point.
+        :param vsize: Image voxel size.
+        :raises ValueError: If setting the image fails.
+        """
+        try:
+            origin_vec = VecFloat(origin[0], origin[1], origin[2])
+            vsize_vec = VecFloat(vsize[0], vsize[1], vsize[2])
+            self.lib.CRSF_setImage_bbox(crsf_p, image, width, height, depth, origin_vec, vsize_vec)
+        except Exception as e:
+            raise ValueError(f"Error setting the image: {e}")
 
     def set_threshold(self, crsf_p, min_threshold, max_threshold):
         """
@@ -200,44 +220,6 @@ class CubicalRidgeSurfaceFinderAPI:
             return self.lib.CRSF_getMaxThreshold(crsf_p)
         except Exception as e:
             raise RuntimeError(f"Error getting the maximum threshold: {e}")
-    
-    def seed_sampler(self, crsf_p, data, width, height, depth, threshold, vsize):
-        """
-        Generate sample points to use as seed points in CRSF. 
-        It chooses the voxel with the highest value for each conected graph.
-        
-        :param crsf_p: Pointer to the `CubicalRidgeSurfaceFinder` instance.
-        :param data: A pointer to a 1D array containing the image or distance map data.
-        :param width: Width of the image in voxels.
-        :param height: Height of the image in voxels.
-        :param depth: Depth of the image in voxels.
-        :param threshold: Threshold for a voxel to be considered as a candidate seed.
-        :param vsize: Voxel size for each vertex.
-        :raises RuntimeError: If generating seed points fails.
-        """
-        try:
-            self.lib.CRSF_seedSampler(crsf_p, data, width, height, depth, threshold, vsize)
-        except Exception as e:
-            raise RuntimeError(f"Error generating seed points: {e}")
-
-    def get_seeds(self, crsf_p):
-        """
-        Gets the list of seeds as a numpy.ndarray.
-
-        :param crsf_p: Pointer to the `CubicalRidgeSurfaceFinder` instance.
-        :return: (N, 3) numpy array of seed points (x, y, z) in world coordinates.
-        """
-        try:
-            ptr = self.lib.CRSF_getSeedPoints(crsf_p)
-            count = self.lib.CRSF_getSeedCount(crsf_p)
-
-            # Convert pointer to numpy array
-            arr_type = VecFloat * count
-            arr = ctypes.cast(ptr, ctypes.POINTER(arr_type)).contents
-            
-            return np.array([(p.x, p.y, p.z) for p in arr], dtype=np.float32)
-        except Exception as e:
-            raise RuntimeError(f"Error getting the list of seed points: {e}")
 
     def add_seed(self, crsf_p, x, y, z, distance):
         """
@@ -262,13 +244,13 @@ class CubicalRidgeSurfaceFinderAPI:
         :param crsf_p: Pointer to the `CubicalRidgeSurfaceFinder` instance.
         :param minDistanceRel: The minimum relative distance required to consider a candidate as a valid seed point.
         :param maxDistanceNewSeed: The maximum distance to propagate during the Fast Marching algorithm by the new seed.
-        :raises ValueError: If no valid seed point is found.
+        :return: Index of the added seed or None if it did not find any possible one.
         :raises RuntimeError: If adding the automatic seeds fails.
         """
         try:
             index = self.lib.CRSF_addAutomaticSeeds(crsf_p, minDistanceRel, maxDistanceNewSeed)
             if index == -1:
-                raise ValueError("No valid seed point found.")
+                index = None
             return index
         except Exception as e:
             raise RuntimeError(f"Error adding automatic seed points: {e}")
@@ -284,6 +266,22 @@ class CubicalRidgeSurfaceFinderAPI:
             self.lib.CRSF_clearSeedPoints(crsf_p)
         except Exception as e:
             raise RuntimeError(f"Error clearing seed points: {e}")
+        
+    def seed_sampler(self, crsf_p, threshold, distance):
+        """
+        Generate sample points to use as seed points in CRSF and adds them to the CRSF instance.
+        It chooses the voxel with the highest value for each conected graph.
+        
+        :param crsf_p: Pointer to the `CubicalRidgeSurfaceFinder` instance.
+        :param threshold: Threshold for a voxel to be considered as a candidate seed.
+        :param distance: The maximum distance to propagate during the Fast Marching algorithm.
+        :raises RuntimeError: If generating seed points fails.
+        """
+        try:
+            self.lib.CRSF_seedSampler(crsf_p, threshold, distance)
+        except Exception as e:
+            raise RuntimeError(f"Error generating or adding seed points: {e}")
+
     def recalculate(self, crsf_p):
         """
         Recalculates the ridge surface patches based on the current seed points.

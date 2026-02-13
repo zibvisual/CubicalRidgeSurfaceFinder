@@ -33,8 +33,6 @@ struct CRSF_Handle {
     progressbar::Progressbar* progress;
     ridgesurface::CubicalRidgeSurfaceFinder* rsf;
     RawFieldView<float>* raw;
-    VecFloat* points;
-    size_t n_points;
 };
 
 extern "C" {
@@ -97,8 +95,6 @@ extern "C" {
         h->progress = progress;
         h->rsf = rsf;
         h->raw = nullptr;
-        h->points = nullptr;
-        h->n_points = 0;
         return h;
     }
 
@@ -125,15 +121,6 @@ extern "C" {
         h->progress = nullptr;
     }
 
-    if (h->points) {
-        delete h->points;
-        h->points = nullptr;
-    }
-
-    if (h->n_points) {
-        h->n_points = 0;
-    }
-
     delete h;
 }
 
@@ -152,6 +139,29 @@ extern "C" {
 
         //std::vector<float> vec(data, data + width * height * depth);
         h->raw = new RawFieldView<float>(data, Dims(width, height, depth));
+
+        h->rsf->setInput(h->raw);
+    }
+
+    /**
+     * @brief Set the input image for a `CubicalRidgeSurfaceFinder` object.
+     * @param h A pointer to the `CRSF_Handle` object.
+     * @param data A pointer to a 1D array containing the image data.
+     * @param width, height, depth Dimensions of the input image (in voxels).
+     * @param origin Image origin point.
+     * @param vsize Image voxel size.
+     */ 
+    void CRSF_setImage_bbox(CRSF_Handle* h, float* data, int width, int height, int depth, VecFloat_C origin_c, VecFloat_C vsize_c) {
+
+        if (!h) return;
+
+        // Delete old raw if exists
+        if (h->raw) delete h->raw;
+
+        VecFloat origin(origin_c.x, origin_c.y, origin_c.z);
+        VecFloat vsize(vsize_c.x, vsize_c.y, vsize_c.z);
+
+        h->raw = new RawFieldView<float>(data, Lattice(Dims(width, height, depth), origin, vsize));
 
         h->rsf->setInput(h->raw);
     }
@@ -182,58 +192,6 @@ extern "C" {
      */
     float CRSF_getMaxThreshold(CRSF_Handle* h) {
         return h->rsf->getMax();
-    }
-
-    /**
-     * @brief Generates sample points to use as seed points in CRSF. 
-     * It chooses the voxel with the highest value for each conected graph.
-     * @param h Pointer to the `CRSF_Handle` object.
-     * @param data A pointer to a 1D array containing the image or distance map data.
-     * @param width, height, depth Dimensions of the input image (in voxels).
-     * @param threshold Threshold for a voxel to be considered as a candidate seed.
-     * @param vsize Voxel size for each vertex.
-     */
-    void CRSF_seedSampler(CRSF_Handle* h, const float* data, int width, int height,
-                          int depth, float threshold, float vsize)
-    {
-        delete[] h->points;
-        h->points = nullptr;
-
-        Dims dims(width, height, depth);
-
-        std::vector<uint32_t> result = sample(data, dims, threshold);
-
-        h->n_points = result.size();
-        if (h->n_points == 0)
-            return;
-
-        h->points = new VecFloat[result.size()];
-
-        for (std::size_t i = 0; i < result.size(); ++i) {
-            VecSize gridLoc = Lattice::gridLocationFromCIndex(result[i], dims);
-            h->points[i] = VecFloat(
-                static_cast<float>(gridLoc.x()),
-                static_cast<float>(gridLoc.y()),
-                static_cast<float>(gridLoc.z())
-            );
-        }
-    }
-
-    /**
-     * @brief Gets the pointer to the seed points array obtained by `seedSampler()`.
-     * @param h Pointer to the `CRSF_Handle` object.
-     * @return Pointer to a VecFloat array.
-     */
-    const VecFloat* CRSF_getSeedPoints(CRSF_Handle* h) {
-        return h->points;
-    }
-    /**
-     * @brief Gets the number of seeds obtained by `seedSampler()`.
-     * @param h Pointer to the `CRSF_Handle` object.
-     * @return Number of seeds obtained by `seedSampler()`.
-     */
-    size_t CRSF_getSeedCount(CRSF_Handle* h) {
-        return h->n_points;
     }
 
     /**
@@ -276,6 +234,36 @@ extern "C" {
     void CRSF_clearSeedPoints(CRSF_Handle* h) {
         h->rsf->clearSeeds();
     }
+
+    /**
+     * @brief Generates sample points to use as seed points in CRSF and adds them to the CRSF instance.
+     * It chooses the voxel with the highest value for each conected graph.
+     * @param h Pointer to the `CRSF_Handle` object.
+     * @param data A pointer to a 1D array containing the image or distance map data.
+     * @param threshold Threshold for a voxel to be considered as a candidate seed.
+     * @param distance The maximum distance to propagate during the Fast Marching algorithm.
+     */
+    void CRSF_seedSampler(CRSF_Handle* h, float threshold, float distance)
+    {
+        if (h->raw) {
+            Dims dims = h->raw->getDims();
+            auto lattice = h->raw->lattice();
+
+            std::vector<uint32_t> result = sample(h->raw->data(), dims, threshold);
+
+            for (std::size_t i = 0; i < result.size(); ++i) {
+                VecSize gridLoc = Lattice::gridLocationFromCIndex(result[i], dims);
+                VecFloat worldPos = lattice.worldPosition(gridLoc);
+                float x = worldPos.x();
+                float y = worldPos.y();
+                float z = worldPos.z();
+                CRSF_addSeed(h, x, y, z, distance);   
+            }
+        }
+        else
+            throw std::runtime_error("CRSF_seedSampler error: no image set in CRSF.");
+    }
+
 
     /**
      * @brief Recalculates the ridge surface patches based on the current seed points.
