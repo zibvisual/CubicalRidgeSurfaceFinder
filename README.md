@@ -45,7 +45,9 @@ Images show the Smelt Petal and the Monkey Saddle example with the original outp
 - src: contains the source code library
 - includes: extern libraries used in this project and included with the project for ease of installation and use
 - main.cxx: entry point for the terminal program
-- test.cpp: entry point for the test program, created with catch2
+- test.cxx: entry point for the test program, created with catch2
+- api.cpp: entry point for the C-API. Used for python bindings.
+- api/python/bindings.py: Python bindings to use with the compiled `rsfapi.so` library.
 
 ## License
 
