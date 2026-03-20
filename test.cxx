@@ -191,7 +191,7 @@ TEST_CASE("Fast Marching", "[fm]")
 
 TEST_CASE("Wavefront Files", "[obj][io]")
 {
-    SECTION("default singular global patch"){
+    SECTION("cube example"){
         auto data = read_wavefront("data/surfaces/unit_cube");
         std::vector<VecFloat> points = {
             VecFloat(0.f,0.f,0.f),
@@ -204,15 +204,13 @@ TEST_CASE("Wavefront Files", "[obj][io]")
             VecFloat(1.f,1.f,1.f),
         };
         REQUIRE_THAT(data.points, UnorderedEquals(points));
-        REQUIRE(data.patches.size() == 0);
 
         auto cube = surface::Surface::load(__DATAPATH__+"/surfaces/unit_cube");
         REQUIRE(cube.number_of_points() == 8);
         REQUIRE(cube.number_of_trianlges() == 12);
-        REQUIRE(cube.number_of_patches() == 1);
     }
 
-    SECTION("small surface example with explicit patches"){
+    SECTION("house example"){
         auto data = read_wavefront("data/surfaces/house");
         std::vector<VecFloat> points = {
             VecFloat(1.f,0.f,1.f),
@@ -248,17 +246,10 @@ TEST_CASE("Wavefront Files", "[obj][io]")
             {6,8,9}
         };
         REQUIRE_THAT(data.triangles, UnorderedEquals(triangles));
-        std::vector<std::size_t> patches = {
-            2,
-            4,
-            12
-        };
-        REQUIRE_THAT(data.patches, UnorderedEquals(patches));
     
         auto surf = surface::Surface::load(__DATAPATH__+"/surfaces/house");
         REQUIRE(surf.number_of_points() == 10);
         REQUIRE(surf.number_of_trianlges() == 18);
-        REQUIRE(surf.number_of_patches() == 4);
     }
 }
 

@@ -62,8 +62,8 @@ public:
 
     LineSet() : m_lines() {}
 
-    void save(std::string output_path) const {
-        write_line_data(output_path, *this);
+    void save(std::filesystem::path output) const {
+        write_line_data(output, *this);
     }
 
     void reserve(std::size_t size) {

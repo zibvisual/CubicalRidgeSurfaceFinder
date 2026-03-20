@@ -68,9 +68,9 @@ inline graph_data_t read_graph_data(std::istream& input){
    return graph_data_t{points, edges};
 }
 
-inline graph_data_t read_graph_data(const std::string &filename)
+inline graph_data_t read_graph_data(std::filesystem::path& input)
 {
-  auto stream = filename_to_ifstream(filename, "tgf");
+  auto stream = path_to_ifstream(input, "tgf");
   return read_graph_data(stream);
 }
 
@@ -121,9 +121,9 @@ inline compact_graph_data_t read_graph_data_rename(std::istream& input){
    return compact_graph_data_t{points, edges};
 }
 
-inline compact_graph_data_t read_graph_data_rename(const std::string &filename)
+inline compact_graph_data_t read_graph_data_rename(std::filesystem::path& input)
 {
-  auto stream = filename_to_ifstream(filename, "tgf");
+  auto stream = path_to_ifstream(input, "tgf");
   return read_graph_data_rename(stream);
 }
 
@@ -142,8 +142,8 @@ inline void write_graph_data(std::ostream& output, graph_data_t data){
    }
 }
 
-inline void write_graph_data(const std::string &filename, graph_data_t data)
+inline void write_graph_data(std::filesystem::path& output, graph_data_t data)
 {
-  auto stream = filename_to_ofstream(filename, "tgf");
+  auto stream = path_to_ofstream(output, "tgf");
   write_graph_data(stream, data);
 }

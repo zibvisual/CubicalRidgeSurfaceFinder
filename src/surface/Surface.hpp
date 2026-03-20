@@ -6,8 +6,11 @@
 #include <iostream>
 #include <unordered_set>
 
+#include <surface/Triangle.hpp>
+#include <surface/SurfaceUpdate.hpp>
 #include <utils/Vec.hpp>
 #include <utils/Permutation.hpp>
+#include <io/common.hpp>
 #include <io/wavefront.hpp>
 
 // TODO: write wavefront files with this surface! This is the most important, so we can debug!
@@ -26,157 +29,97 @@
 
 namespace surface {
     /**
-     * Patch Id of zero means we want to remove the triangle.
+     * Patch Information. All triangles and points of a patch are in a subslice of the vectors.
+     * All triangles and points to belong to exactly one patch. If a patch is deleted, the triangles and points can be so too.
+     * The order of the patches and of the triangle slices and point slices stays the same!
      */
-    class Triangle {
-    public:
-        Triangle(std::array<std::size_t, 3> point_indices, int64_t patch) : m_points(point_indices), m_patch(patch){}
-        std::array<std::size_t, 3> toRaw() const {
-            return m_points;
-        }
-
-        Triangle map(const mutil::Permutation& perm) const {
-            return Triangle({perm[m_points[0]], perm[m_points[1]], perm[m_points[2]]}, m_patch);
-        }
-
-        bool operator==(const Triangle& rhs) const {
-            if(m_patch != rhs.m_patch){
-                return false;
-            }
-            // find first matching point of rhs
-            std::size_t match = 3;
-            for(std::size_t i = 0; i < 3; ++i){
-                if(m_points[0] == rhs.m_points[i]){
-                    match = i;
-                    break;
-                }
-            }
-            if(match > 2){
-                return false;
-            }
-            return m_points[1] == rhs.m_points[(match + 1) % 3] && m_points[2] == rhs.m_points[(match + 2) % 3];
-        }
-
-        bool lexicographic_order(const Triangle& rhs) const {
-            if(m_patch < rhs.m_patch){
-                return true;
-            }else if(m_patch > rhs.m_patch){
-                return false;
-            }
-
-            // find min of both
-            auto lmin = min_index();
-            auto rmin = rhs.min_index();
-
-            for(std::size_t i = 0; i < 3; ++i){
-                if(m_points[(lmin + i) % 3] < rhs.m_points[(rmin + i) % 3]){
-                    return true;
-                }else if(m_points[(lmin + i) % 3] > rhs.m_points[(rmin + i) % 3]){
-                    return false;
-                }
-            }
-            return false;
-        }
-
-        const std::size_t& operator[](int index) const {
-            return m_points[index];
-        }
-
-        const int64_t patch_id() const {
-            return m_patch;
-        }
-
-        uint64_t m_patch;
-    private:
-        std::size_t min_index() const {
-            std::size_t index = 0;
-            std::size_t min = m_points[0];
-            for(std::size_t i = 1; i < 3; ++i){
-                if(m_points[i] < min){
-                    min = m_points[i];
-                    index = i;
-                }
-            }
-            return index;
-        }
-        std::array<std::size_t, 3> m_points;
-    };
-
-    inline std::ostream& operator<<(std::ostream& os, const Triangle& triangle)
-    {
-        os << "<" << triangle[0] << ", " << triangle[1] << ", " << triangle[2] << ">";
-        return os;
-    }
-
     struct PatchInformation {
-        uint64_t m_patch;
+        uint64_t id;
         bool orientation;
+        bool deleted;
+        std::size_t point_start;
+        std::size_t point_end;
+        std::size_t triangle_start;
+        std::size_t triangle_end;
+
+        PatchInformation(uint64_t id, std::size_t point_start, std::size_t point_end, std::size_t triangle_start, std::size_t triangle_end)
+        : id(id)
+        , orientation(false)
+        , deleted(false)
+        , point_start(point_start)
+        , point_end(point_end)
+        , triangle_start(triangle_start)
+        , triangle_end(triangle_end) {}
     };
 
     /**
      * A triangulated surface mesh with patches (triangle groups). Triangles have a patch id.
      * A list of PatchInformation is also given. They contain the patch_id and if the orientation of the patch is flipped.
      * If a patch id is not contained in the PatchInformation list, one may assume the patch to be deleted and not used anymore.
+     * 
+     * Invariant: patches are in a block within m_trianlges. That is, except for patch -1, all patches are contained in a range/slice.
+     * Invariant: Each point and each triangle belong to exactly one patch.
      */
     class Surface {
     public:
-        Surface() : m_points(), m_triangles(){}
+        Surface() : m_points(), m_triangles(), m_patches(), m_patchlocation(){}
 
-        static Surface load(std::string input_path){
-            auto data = read_wavefront(input_path);
-            return Surface::fromRaw(data);
-        }
-
-        void save(std::string output_path) const {
-            write_wavefront(output_path, toRaw());
-        }
-
-        static Surface fromRaw(wavefront_data_t data){
-            auto surface = Surface(data.points, data.triangles, data.patches);
-            return surface;
-        }
-        
-        wavefront_data_t toRaw() const {
-            // TODO: sort triangles depending on their patch, remove all obsolete triangles and unused points
-            // convert triangles
-            std::vector<std::array<std::size_t, 3>> triangles;
-            std::vector<std::size_t> patches;
-            triangles.reserve(m_triangles.size());
-            std::size_t lastPatch = 0;
-            for(std::size_t i = 0; i < m_triangles.size(); ++i){
-                triangles.push_back(m_triangles[i].toRaw());
-                if(lastPatch != m_triangles[i].patch_id()){
-                    lastPatch = m_triangles[i].patch_id();
-                    patches.push_back(i);
-                }
+        // single patch surface (id of 0)
+        Surface(std::vector<VecFloat> points, std::vector<std::array<std::size_t, 3>> triangles)
+        : m_points(points)
+        , m_triangles()
+        , m_patches()
+        , m_patchlocation()
+        {
+            // convert triangles --> transmute should be possible
+            for(auto triangle : triangles){
+                m_triangles.push_back(SimpleTriangle(triangle));
             }
-            return wavefront_data_t{m_points, triangles, patches};
+            m_patches.push_back(PatchInformation(0,0,m_points.size(), 0, m_triangles.size()));
+            m_patchlocation[0] = 0;
+        }
+
+        static Surface load(std::filesystem::path input_path){
+            auto data = read_wavefront(input_path);
+            return Surface(data.points, data.triangles);
+        }
+
+        void save(std::filesystem::path output_path) const {
+            write_wavefront(output_path, m_points, m_triangles);
+        }
+
+        void save_each_patch(std::filesystem::path stem) const {
+            for(const auto& patch : m_patches){
+                if(patch.deleted){
+                    continue;
+                }
+
+                auto filename = stem.stem();
+                filename += "_patch_" + std::to_string(patch.id) + ".";
+                filename += stem.extension();
+
+                // iterarate and create spans
+                auto points = std::span(m_points.cbegin() + patch.point_start, m_points.cbegin() + patch.point_end);
+                auto triangles = std::span(m_triangles.cbegin() + patch.triangle_start, m_triangles.cbegin() + patch.triangle_end);
+                write_wavefront(filename, points, triangles);
+            }
         }
 
         Surface clone() const {
             return Surface(
                 m_points,
-                m_triangles
+                m_triangles,
+                m_patches,
+                m_patchlocation
             );
         }
 
-        void removeUnusedPoints(){
-            // TODO: go through all triangles and collect indices of the points. 
+        void clean_data(){
+            // TODO: do real deletion of points/triangles/patches
         }
 
-        /**
-         * If mulitple patches should be removed, prefer removePatches()
-         */
         void removePatch(uint64_t id){
-
-            m_triangles.erase(std::remove_if(begin(m_triangles), end(m_triangles), [id](const auto& triangle) { return triangle.patch_id() == id;}));
-            removeUnusedPoints();
-        }
-
-        void removePatches(const std::unordered_set<uint64_t>& ids)
-        {
-            m_triangles.erase(std::remove_if(begin(m_triangles), end(m_triangles), [&ids](const auto& triangle) { return ids.contains(triangle.patch_id());}));
-            removeUnusedPoints();
+            m_patches[m_patchlocation[id]].deleted = true;
         }
 
         bool validSurface() const;
@@ -215,7 +158,7 @@ namespace surface {
 
         mutil::Permutation mapEqualTriangles(const Surface& rhs) const {
             auto perm = mutil::Permutation::mapPermutation(m_triangles, rhs.m_triangles, 
-                [&](const Triangle& a, const Triangle& b) {
+                [&](const SimpleTriangle& a, const SimpleTriangle& b) {
                     return a.lexicographic_order(b);
                 }
             );
@@ -244,7 +187,7 @@ namespace surface {
             return true;
         }
 
-        const std::vector<Triangle>& triangles() const {
+        const std::vector<SimpleTriangle>& triangles() const {
             return m_triangles;
         }
 
@@ -262,27 +205,89 @@ namespace surface {
 
         /** we count */
         std::size_t number_of_patches() const {
-            auto set = std::unordered_set<int64_t>();
-            for(const auto triangle : m_triangles){
-                set.insert(triangle.patch_id());
+            std::size_t counter = 0;
+            for(const auto patch : m_patches){
+                counter += static_cast<std::size_t>(!patch.deleted);
             }
-            return set.size();
+            return counter;
         }
 
         // Methods to modify Surface. Usually not used directly.
         void clear() {
             m_points.clear();
             m_triangles.clear();
+            m_patches.clear();
+            m_patchlocation.clear();
         }
 
+        /**
+         * Should only be used when also adding another patch. Invariants must hold.
+         */
         void addPoint(VecFloat point){
             m_points.push_back(point);
         }
 
-        void addTriangle(std::size_t point1, std::size_t point2, std::size_t point3, std::size_t patch){
-            m_triangles.push_back(Triangle({point1, point2, point3}, patch));
+        /**
+         * Should only be used when also adding another patch. Invariants must hold.
+         */
+        void addTriangle(std::size_t point1, std::size_t point2, std::size_t point3){
+            m_triangles.push_back(SimpleTriangle(point1, point2, point3));
         }
 
+        void finishNewPatch(uint64_t id, std::size_t point_start, std::size_t triangle_start){
+            m_patchlocation[id] = m_patches.size();
+            m_patches.push_back(PatchInformation(id, point_start, m_points.size(), triangle_start, m_triangles.size()));
+        }
+
+        void flipPatchOrientation(std::size_t patch){
+            // flip boolean
+            m_patches[m_patchlocation[patch]].orientation ^= true;
+        }
+
+        void update(SurfaceUpdate update){
+            for(auto deletion : update.m_removals){
+                m_patches[m_patchlocation[deletion]].deleted = true;
+            }
+            
+            // add points
+            auto point_start = m_points.size();
+            m_points.reserve(m_points.size() + update.m_points.size());
+            m_points.insert(m_points.end(), update.m_points.begin(), update.m_points.end());
+
+            // add triangles
+            auto triangle_start = m_triangles.size();
+            m_triangles.reserve(m_triangles.size() + update.m_triangles.size());
+            for(auto triangle : update.m_triangles){
+                triangle.index_translate(point_start);
+                m_triangles.push_back(triangle);
+            }
+
+            // set patch id
+            for(const auto& addition : update.m_additions){
+                auto loc = m_patches.size();
+                m_patches.push_back(
+                    PatchInformation(
+                        addition.patch_id, 
+                        addition.point_start + point_start,
+                        addition.point_end + point_start,
+                        addition.triangle_start + triangle_start,
+                        addition.triangle_end + triangle_start
+                    ));
+                m_patchlocation[addition.patch_id] = loc;
+            }
+
+            // orientation flips
+            for(auto patch : update.m_orientation_flips){
+                flipPatchOrientation(patch);
+            }
+            // TODO: if debug is activated, we keep a patched surface up to date.
+        }
+
+
+    private:
+        /**
+         * Only use permutation which permute points/triangles inside their own patch. Do not cross over!
+         */
         Surface permutePoints(const mutil::Permutation& perm) const{
             if(perm.size() != m_points.size()){
                 return Surface();
@@ -297,56 +302,117 @@ namespace surface {
             for(std::size_t i = 0; i < triangles.size(); ++i){
                 triangles[i] = m_triangles[i].map(perm);
             }
-            return Surface(points, triangles);
+            return Surface(points, triangles, m_patches, m_patchlocation);
         }
 
-        /**
-         * All triangles are moved from source to target (unneccasary)
-         */
-        void replacePatch(std::size_t source, std::size_t target){
-            for(auto triangle : m_triangles){
-                if(triangle.patch_id() == source){
-                    triangle.m_patch = target;
-                }
-            }
-        }
-
-        void flipPatchOrientation(std::size_t patch){
-            //TODO
-        }
-
-
-    private:
-        Surface(std::vector<VecFloat> points, std::vector<std::array<std::size_t, 3>> triangles, std::vector<std::size_t> patches)
-        : m_points(points)
-        , m_triangles()
-        {
-            // convert triangles
-            std::size_t patch_counter = 0;
-            m_triangles.reserve(triangles.size());
-            for(std::size_t i = 0; i < triangles.size(); ++i){
-                if(patch_counter < patches.size() && patches[patch_counter] == i){
-                    ++patch_counter;
-                }
-                m_triangles.push_back(Triangle(triangles[i], patch_counter + 1));
-            }
-            // TODO: check if surface is valid
-        }
-        Surface(std::vector<VecFloat> points, std::vector<Triangle> triangles)
+        Surface(std::vector<VecFloat> points, std::vector<SimpleTriangle> triangles, std::vector<PatchInformation> patches)
         : m_points(points)
         , m_triangles(triangles)
+        , m_patches(patches)
+        , m_patchlocation()
         {
+            // generate patch location
+            std::size_t counter = 0;
+            for(const auto& patch : m_patches){
+                m_patchlocation[patch.id] = counter++; 
+            }
         }
+
+        Surface(std::vector<VecFloat> points, std::vector<SimpleTriangle> triangles, std::vector<PatchInformation> patches, std::unordered_map<uint64_t, std::size_t> patchlocation)
+        : m_points(points)
+        , m_triangles(triangles)
+        , m_patches(patches)
+        , m_patchlocation(patchlocation)
+        {}
+
     private:
         std::vector<VecFloat> m_points;
         // contain the indices of the points
-        std::vector<Triangle> m_triangles;
+        std::vector<SimpleTriangle> m_triangles;
         std::vector<PatchInformation> m_patches;
+        std::unordered_map<uint64_t, std::size_t> m_patchlocation;
     };
 
-    // Keeps track of their points and their indices
-    class SurfaceBuilder {
-    public:
-        SurfaceBuilder() {}
-    };
+    // class SurfaceBuilder {
+    // public:
+    //     void startPatch(uint64_t patch_id)
+    //     {
+    //         m_current_patch = patch_id;
+    //         m_first_point = m_points.size();
+    //         m_first_triangle = m_triangles.size();
+    //     }
+    //     std::size_t addPoint(VecFloat point)
+    //     {
+    //         auto size = m_points.size();
+    //         m_points.push_back(point);
+    //         return size;
+    //     }
+    //     void addTriangle(std::size_t first, std::size_t second, std::size_t third)
+    //     {
+    //         m_triangles.push_back(SimpleTriangle(first, second, third));
+    //     }
+    //     void endPatch()
+    //     {
+    //         m_additions.push_back(
+    //             PatchAddition {
+    //                 m_current_patch,
+    //                 m_first_point,
+    //                 m_points.size(),
+    //                 m_first_triangle,
+    //                 m_triangles.size()
+    //             }
+    //         );
+    //     }
+    
+    //     void addFlip(uint64_t patch_id){
+    //         m_orientation_flips.push_back(patch_id);
+    //     }
+    
+    //     void removePatch(uint64_t patch_id){
+    //         m_removals.push_back(patch_id);
+    //     }
+    
+    //     /**
+    //      * Consumes current object and returns SurfaceUpdate. SurfaceUpdateBuilder is empty afterwards!
+    //      */
+    //     SurfaceUpdate build(){
+    //         m_current_patch = 0;
+    //         m_first_point = 0;
+    //         m_first_triangle = 0;
+    
+    //         return SurfaceUpdate {
+    //             std::move(m_additions),
+    //             std::move(m_orientation_flips),
+    //             std::move(m_removals),
+    //             std::move(m_points),
+    //             std::move(m_triangles)
+    //         };
+    //     }
+    
+    //     /**
+    //      * Clear Builder without creating SurfaceUpdate
+    //      */
+    //     void clear(){
+    //         m_additions.clear();
+    //         m_orientation_flips.clear();
+    //         m_removals.clear();
+    //         m_points.clear();
+    //         m_triangles.clear();
+    
+    //         m_current_patch = 0;
+    //         m_first_point = 0;
+    //         m_first_triangle = 0;
+    //     }
+    
+    // private:
+    //     std::vector<PatchAddition> m_additions;
+    //     std::vector<uint64_t> m_orientation_flips;
+    //     std::vector<uint64_t> m_removals;
+    //     std::vector<VecFloat> m_points;
+    //     std::vector<SimpleTriangle> m_triangles;
+    
+    //     uint64_t m_current_patch;
+    //     std::size_t m_first_point;
+    //     std::size_t m_first_triangle;
+    // };
 }

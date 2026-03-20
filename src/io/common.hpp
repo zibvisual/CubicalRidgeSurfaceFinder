@@ -6,13 +6,23 @@
 #include <filesystem>
 #include <ios>
 
-inline std::ifstream filename_to_ifstream(const std::string &filename, const std::string &extension, const bool replace_extension = false){
+inline std::filesystem::path filename_to_path(const std::filesystem::path& filename, const std::string& suffix = ""){
+    auto comp = filename.stem();
+    comp += suffix;
     // allow relative image paths
-    auto input = std::filesystem::current_path() / filename;
-    if (!input.has_extension() || replace_extension)
-    {
-        input = input.replace_extension(extension);
+    return std::filesystem::current_path() / comp;
+}
+
+inline void path_extension(std::filesystem::path& path, const std::string& extension, const bool replace_extension = false){
+    if(!path.has_extension() || replace_extension){
+        path.replace_extension(extension);
+    }else{
+        path += "." + extension;
     }
+}
+
+inline std::ifstream path_to_ifstream(std::filesystem::path& input, const std::string& extension, const bool replace_extension = false){
+    path_extension(input, extension, replace_extension);
     std::ifstream stream(input, std::ifstream::binary);
     if (!stream)
     {
@@ -21,14 +31,8 @@ inline std::ifstream filename_to_ifstream(const std::string &filename, const std
     return stream;
 }
 
-inline std::ofstream filename_to_ofstream(const std::string &filename, const std::string &extension, const bool replace_extension = false){
-    // allow relative image paths
-    auto output = std::filesystem::current_path() / filename;
-    if (!output.has_extension() || replace_extension)
-    {
-        output = output.replace_extension(extension);
-    }
-    // create directories if necessary
+inline std::ofstream path_to_ofstream(std::filesystem::path& output, const std::string& extension, const bool replace_extension = false){
+    path_extension(output, extension, replace_extension);
     std::filesystem::create_directories(output.parent_path());
     std::ofstream stream(output, std::ofstream::binary);
     if (!stream)

@@ -88,8 +88,8 @@ inline void write_line_data(std::ostream& output, const LineSet<T>& lineset){
 }
 
 template<typename T>
-inline void write_line_data(const std::string &filename, const LineSet<T>& data)
+inline void write_line_data(std::filesystem::path output, const LineSet<T>& data)
 {
-  auto stream = filename_to_ofstream(filename, "sls");
+  auto stream = path_to_ofstream(output, "sls");
   write_line_data(stream, data);
 }

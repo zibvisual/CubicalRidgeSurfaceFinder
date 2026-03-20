@@ -854,9 +854,9 @@ namespace npy
     return header.dtype.stype;
   }
 
-  inline stype_t probe_npy_scalartype(const std::string &filename)
+  inline stype_t probe_npy_scalartype(std::filesystem::path& input)
   {
-    auto stream = filename_to_ifstream(filename, "npy");
+    auto stream = path_to_ifstream(input, "npy");
     return probe_npy_scalartype(stream);
   }
 
@@ -970,9 +970,9 @@ namespace npy
   }
 
   template <typename T>
-  inline npy_data<T> read_npy(const std::string &filename)
+  inline npy_data<T> read_npy(std::filesystem::path& input)
   {
-    auto stream = filename_to_ifstream(filename, "npy");
+    auto stream = path_to_ifstream(input, "npy");
     return read_npy<T>(stream);
   }
 
@@ -992,9 +992,9 @@ namespace npy
   }
 
   template <typename T>
-  inline void write_npy(const std::string &filename, const npy_data<T> &data)
+  inline void write_npy(std::filesystem::path& output, const npy_data<T> &data)
   {
-    auto stream = filename_to_ofstream(filename, "npy");
+    auto stream = path_to_ofstream(output, "npy");
     write_npy<T>(stream, data);
   }
 
@@ -1013,9 +1013,9 @@ namespace npy
   }
 
   template <typename T>
-  inline void write_npy(const std::string &filename, const npy_data_ptr<T> &data_ptr)
+  inline void write_npy(std::filesystem::path& output, const npy_data_ptr<T> &data_ptr)
   {
-    auto stream = filename_to_ofstream(filename, "npy");
+    auto stream = path_to_ofstream(output, "npy");
     write_npy<T>(stream, data_ptr);
   }
 } // namespace npy

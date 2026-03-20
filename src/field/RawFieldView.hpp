@@ -121,12 +121,12 @@ public:
     {
     }
 
-    void save(std::string output_path){
+    void save(std::filesystem::path output){
         npy::npy_data_ptr<T> data;
         data.data_ptr = this->data();
         data.shape = npy::shape_t(m_lattice.dims()[0], m_lattice.dims()[1], m_lattice.dims()[2]);
         // fortran order is also inside of data (false currently...)
-        npy::write_npy(output_path, data);
+        npy::write_npy(output, data);
 
         const auto voxelsize = m_lattice.voxelsize();
         const auto origin = m_lattice.origin();
@@ -136,7 +136,7 @@ public:
         metadata.data.push_back({std::to_string(voxelsize[0]), std::to_string(voxelsize[1]), std::to_string(voxelsize[2])});
         metadata.keywords.push_back("origin");
         metadata.data.push_back({std::to_string(origin[0]), std::to_string(origin[1]), std::to_string(origin[2])});
-        write_metadata(output_path, metadata);
+        write_metadata(output, metadata);
     }
   
     /**

@@ -18,13 +18,15 @@ public:
 
     template <class Iter>
     void
-    populateSurfacePatch(surface::Surface* surface, std::size_t patch, Lattice lattice, Iter begin, Iter end)
+    populateSurfacePatch(surface::Surface* surface, uint64_t patch, Lattice lattice, Iter begin, Iter end)
     {
         if (!surface)
             return;
-
-        // add all faces and their corresponding points (use a hashmap to keep track of the points)
+        // clear voxel to mesh point, as each patch should have its own points
+        m_voxelToMeshPoint.clear();
         uint64_t pointCounter = surface->points().size();
+        std::size_t point_start = surface->points().size();
+        std::size_t triangle_start = surface->triangles().size();
 
         Iter it = begin;
         while (it != end)
@@ -42,28 +44,29 @@ public:
                     surface->addPoint(corner_positions[i]);
                 }
             }
-            // add the two triangles with the correct orientation and patch number
+            // add the two triangles with the correct orientation
             surface->addTriangle(
                 m_voxelToMeshPoint[corners[0]],
                 m_voxelToMeshPoint[corners[1]],
-                m_voxelToMeshPoint[corners[3]],
-                patch
+                m_voxelToMeshPoint[corners[3]]
             );
             surface->addTriangle(
                 m_voxelToMeshPoint[corners[1]],
                 m_voxelToMeshPoint[corners[2]],
-                m_voxelToMeshPoint[corners[3]],
-                patch
+                m_voxelToMeshPoint[corners[3]]
             );
             ++it;
         }
+
+        surface->finishNewPatch(patch, point_start, triangle_start);
     }
 
     template <class Iter>
     void
     populateSurfacePatch(surface::SurfaceUpdateBuilder& builder, uint64_t patch, Lattice lattice, Iter begin, Iter end)
     {
-        // add all faces and their corresponding points (use a hashmap to keep track of the points)
+        // clear voxel to mesh point, as each patch should have its own points
+        m_voxelToMeshPoint.clear();
         builder.startPatch(patch);
 
         Iter it = begin;
@@ -117,6 +120,7 @@ public:
             return;
 
         surface->clear();
+        m_voxelToMeshPoint.clear();
         // add all faces and their corresponding points (use a hashmap to keep track of the points)
         uint64_t pointCounter = surface->points().size();
 

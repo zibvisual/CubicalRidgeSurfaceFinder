@@ -79,12 +79,12 @@ public:
         return m_view;
     }
 
-    void save(std::string output_path){
+    void save(std::filesystem::path output_path){
         m_view.save(output_path);
     }
 
-    static RawField load(std::string input_path){
-        npy::npy_data<T> data = npy::read_npy<T>(input_path);
+    static RawField load(std::filesystem::path input){
+        npy::npy_data<T> data = npy::read_npy<T>(input);
         if (data.shape.ndims() != 3)
         {
             throw std::invalid_argument("input image must be 3 dimensional");
@@ -93,7 +93,7 @@ public:
 
         Lattice lattice = Lattice(dims);
         try {
-            metadata_t metadata = read_metadata(input_path, true);
+            metadata_t metadata = read_metadata(input, true);
             // std::cout << metadata << std::endl;
             lattice = SpatialInformation::fromMetadata(metadata).toLattice(dims);
         }

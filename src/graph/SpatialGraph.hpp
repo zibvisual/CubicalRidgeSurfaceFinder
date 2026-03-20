@@ -13,12 +13,12 @@ public:
     SpatialGraph() {}
     // TODO: load io/tgf
 
-    void save_as_tgf(std::string output_path) const {
-        write_graph_data(output_path, toRawGraphData());
+    void save_as_tgf(std::filesystem::path output) const {
+        write_graph_data(output, toRawGraphData());
     }
 
-    void save_as_lineset(std::string output_path) const {
-        write_line_data(output_path, toLineSet());
+    void save_as_lineset(std::filesystem::path output) const {
+        write_line_data(output, toLineSet());
     }
     
     graph_data_t toRawGraphData() const {

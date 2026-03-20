@@ -62,9 +62,9 @@ inline metadata_t read_metadata(std::istream &input)
     return metadata_t{keywords, datas};
 }
 
-inline metadata_t read_metadata(const std::string &filename, const bool replace_extension = false)
+inline metadata_t read_metadata(std::filesystem::path& input, const bool replace_extension = false)
 {
-    auto stream = filename_to_ifstream(filename, "txt", replace_extension);
+    auto stream = path_to_ifstream(input, "txt", replace_extension);
     return read_metadata(stream);
 }
 
@@ -85,9 +85,9 @@ inline void write_metadata(std::ostream &output, metadata_t data)
     }
 }
 
-inline void write_metadata(const std::string &filename, metadata_t data, const bool replace_extension = false)
+inline void write_metadata(std::filesystem::path& output, metadata_t data, const bool replace_extension = false)
 {
-    auto stream = filename_to_ofstream(filename, "txt", replace_extension);
+    auto stream = path_to_ofstream(output, "txt", replace_extension);
     write_metadata(stream, data);
 }
 

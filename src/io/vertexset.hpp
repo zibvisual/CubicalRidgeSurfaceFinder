@@ -65,9 +65,9 @@ inline vertex_data<float> read_vertexset(std::istream& input, float defaults){
    return vertex_data<float>{points, data};
 }
 
-inline vertex_data<float> read_vertexset(const std::string &filename, float defaults)
+inline vertex_data<float> read_vertexset(std::filesystem::path input, float defaults)
 {
-  auto stream = filename_to_ifstream(filename, "obj");
+  auto stream = path_to_ifstream(input, "obj");
   return read_vertexset(stream, defaults);
 }
 
@@ -80,8 +80,8 @@ inline void write_vertexset(std::ostream& output, vertex_data<float> data){
     }
 }
 
-inline void write_vertexset(const std::string &filename, vertex_data<float> data)
+inline void write_vertexset(std::filesystem::path output, vertex_data<float> data)
 {
-  auto stream = filename_to_ofstream(filename, "obj");
+  auto stream = path_to_ofstream(output, "obj");
   write_vertexset(stream, data);
 }
