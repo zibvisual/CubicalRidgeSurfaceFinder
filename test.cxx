@@ -361,9 +361,83 @@ TEST_CASE("Seedpoint Sampler", "[seed]")
     REQUIRE_THAT(seeds, UnorderedEquals(expected));
 }
 
-// TEST_CASE("Flooding", "[flood]")
+TEST_CASE("Sparse Graph Edge Iterator", "[rsf]")
+{
+    auto graph = klenert::SparseGraph<std::monostate>();
+    graph.addNode(1);
+    graph.addNode(2);
+    graph.addEdge(1,2, {});
+
+    auto iter = graph.edges();
+    REQUIRE(!iter.finished());
+    REQUIRE(iter == true);
+    REQUIRE(iter.current()[0] == 1);
+    REQUIRE(iter.current()[1] == 2);
+
+    auto first = iter.next();
+    REQUIRE(iter.finished());
+    REQUIRE(iter == false);
+    REQUIRE(first.has_value());
+    REQUIRE(first.value()[0] == 1);
+    REQUIRE(first.value()[1] == 2);
+    REQUIRE(!iter.next().has_value());
+
+    // collect all data
+    auto collect = std::vector<std::array<uint64_t, 2>>();
+    for(auto edge : graph.edges())
+    {
+        collect.push_back(edge);
+    }
+
+    auto expected = std::vector<std::array<uint64_t, 2>>();
+    expected.push_back({1,2});
+
+    REQUIRE(collect == expected);
+}
+
+TEST_CASE("Line Set Data Size", "[lineset]")
+{
+    auto lines_void = LineSet<std::monostate>();
+    REQUIRE(lines_void.data_size() == 0);
+
+    auto lines_string = LineSet<std::string>();
+    REQUIRE(lines_string.data_size() == 1);
+
+    auto lines_id = LineSet<uint64_t>();
+    REQUIRE(lines_id.data_size() == 1);
+
+    auto lines_tuple_2 = LineSet<std::tuple<int,int>>();
+    REQUIRE(lines_tuple_2.data_size() == 2);
+
+    auto lines_tuple_3 = LineSet<std::tuple<int,int, int>>();
+    REQUIRE(lines_tuple_3.data_size() == 3);
+
+    // auto spatialgraph = SpatialGraph();
+    // spatialgraph.add_point(1, VecFloat(1., 1.23, 1.2345));
+    // spatialgraph.add_point(2, VecFloat(2., 2.34, 2.3456));
+    // spatialgraph.add_edge(1,2);
+}
+
+// TEST_CASE("Line Set Data Iteration", "[lineset]")
 // {
-//     //TODO test flooding
+//     auto vec = std::vector<int>();
+//     auto builder = LineSetBuilder<std::tuple<int,int>>();
+//     builder.add_point(VecFloat(1.0), std::make_tuple(1,2));
+//     builder.add_point(VecFloat(2.0), std::make_tuple(3,4));
+//     builder.push_line();
+//     builder.add_point(VecFloat(3.0), std::make_tuple(5,6));
+//     builder.add_point(VecFloat(4.0), std::make_tuple(7,8));
+//     builder.push_line();
+//     auto lineset = builder.build();
+
+//     for(const auto& line : lineset.lines()){
+//         for(const auto& point : line){
+//             point.apply_to_data([&vec](auto&& data){vec.push_back(data);});
+//         }
+//     }
+
+//     auto expected = {1,2,3,4,5,6,7,8};
+//     REQUIRE(vec == expected);
 // }
 
 TEST_CASE("Ridge Surface Finder", "[rsf]")

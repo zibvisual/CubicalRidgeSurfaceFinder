@@ -28,10 +28,14 @@ inline std::ofstream filename_to_ofstream(const std::string &filename, const std
     {
         output = output.replace_extension(extension);
     }
+    // create directories if necessary
+    std::filesystem::create_directories(output.parent_path());
     std::ofstream stream(output, std::ofstream::binary);
     if (!stream)
     {
         throw std::ios_base::failure("io error: failed to open file " + output.string() + ".");
+    }else{
+        std::cout << "Write into file " << output << std::endl;
     }
     return stream;
 }

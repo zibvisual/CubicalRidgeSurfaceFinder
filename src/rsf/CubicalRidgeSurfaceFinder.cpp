@@ -180,8 +180,8 @@ namespace ridgesurface
         return m_seeds.size();
     }
 
-    std::optional<uint64_t>
-    CubicalRidgeSurfaceFinder::addSeed(float minDistanceRel, float maxDistanceNewSeed)
+    std::optional<VecFloat>
+    CubicalRidgeSurfaceFinder::getSeedpointCandidate(float minDistanceRel)
     {
         // check if we have a valid seedpoint candidate -> we want the biggest relative distance!
         int64_t max_id = -1;
@@ -209,7 +209,30 @@ namespace ridgesurface
             return {};
         }
         auto point = m_lattice.worldPosition(Lattice::gridLocationFromCIndex(static_cast<std::size_t>(max_id), m_lattice.dims()));
-        return addSeed(Seed::Seedpoint(point, maxDistanceNewSeed));
+        return point;
+        // return addSeed(Seed::Seedpoint(point, maxDistanceNewSeed));
+    }
+
+    std::optional<VecFloat>
+    CubicalRidgeSurfaceFinder::getSeedpointCandidate(float minDistanceRel, float distance)
+    {
+        auto candidate = getSeedpointCandidate(minDistanceRel);
+        if(!candidate){
+            return candidate;
+        }
+        return movePointToRidge(candidate.value(), distance);
+    }
+
+    VecFloat CubicalRidgeSurfaceFinder::movePointToRidge(VecFloat point, float distance)
+    {
+        m_fm.data(m_probability);
+        m_fm.setStartPoint(point);
+        m_fm.maxDistance(distance);
+        m_fm.march();
+        auto voxel_index = m_fm.stoppedAt();
+        // convert to point again
+        auto gridPos = m_lattice.gridLocationFromCIndex(voxel_index,m_probability->dims());
+        return m_lattice.worldPosition(gridPos);
     }
 
     int
@@ -356,6 +379,32 @@ namespace ridgesurface
             // TODO: we should instead use a get method from m_cum_distance
             distance[i] = m_cum_distance.data()[i];
         }
+    }
+
+    SpatialGraph CubicalRidgeSurfaceFinder::generateSeedpointGraph() const
+    {
+        auto graph = SpatialGraph();
+        for(auto point : m_seeds){
+            graph.add_point(point.first, point.second.firstPoint());
+        }
+        for(auto edge : m_graph.edges()){
+            graph.add_edge(edge[0], edge[1]);
+        }
+        return graph;
+    }
+
+    LineSet<std::tuple<uint64_t, int8_t>> CubicalRidgeSurfaceFinder::generatePoles() const
+    {
+        auto builder = LineSetBuilder<std::tuple<uint64_t, int8_t>>();
+        builder.reserve_lines(ts_poles.size());
+
+        for(auto entry : ts_poles){
+            builder.add_point(entry.second[0], {entry.first, -1});
+            builder.add_point(m_seeds.at(entry.first).firstPoint(), {entry.first, 0});
+            builder.add_point(entry.second[1], {entry.first, +1});
+            builder.push_line();
+        }
+        return builder.build();
     }
 
     // void
@@ -1111,7 +1160,7 @@ namespace ridgesurface
     }
 
     void
-    CubicalRidgeSurfaceFinder::grow(std::size_t id)
+    CubicalRidgeSurfaceFinder::grow(uint64_t id)
     {
         Seed seed = m_seeds[id];
         auto dims = m_lattice.dims();
@@ -1261,6 +1310,8 @@ namespace ridgesurface
 
         waterstream.clear();
         // std::cout << "poles calculated" << std::endl;
+        // TODO: TS: COPY
+        ts_poles[id] = {firstFace.center(m_lattice), secondFace.center(m_lattice)};
 
         // now we can create the surface of m_time and split them with firstFace and secondFace
         // as we have only two sinks and their places are already known, we can use a flooding algorithm instead of merging of union-find structures.

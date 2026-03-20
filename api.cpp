@@ -223,7 +223,14 @@ extern "C" {
      *         A valid seed is one with a relative distance greater than `minDistanceRel`.
      */
     int CRSF_addAutomaticSeeds(CRSF_Handle* h, float minDistanceRel, float maxDistanceNewSeed) {
-        return h->rsf->addSeed(minDistanceRel, maxDistanceNewSeed).value_or(-1);
+        auto candidate = h->rsf->getSeedpointCandidate(minDistanceRel, maxDistanceNewSeed*0.05);
+        if(!candidate.has_value()){
+            return -1;
+        }
+        // seedpoint creation
+        ridgesurface::SeedPoint sp(candidate.value());
+        ridgesurface::Seed seed(sp, maxDistanceNewSeed);
+        return h->rsf->addSeed(seed);
     }
 
     /**
@@ -257,7 +264,7 @@ extern "C" {
                 float x = worldPos.x();
                 float y = worldPos.y();
                 float z = worldPos.z();
-                CRSF_addSeed(h, x, y, z, distance);   
+                CRSF_addSeed(h, x, y, z, distance);
             }
         }
         else
@@ -309,4 +316,18 @@ extern "C" {
         return out;
     }
 
+    /**
+     * @brief Saves debug data.
+     * @param h Pointer to the `CRSF_Handle` object.
+     */
+    void CRSF_save_debug_information(CRSF_Handle* h, char* debug_folder_path, char* filename) 
+    {
+        auto seedpoint_graph = h->rsf->generateSeedpointGraph();
+        auto dfp = std::string(debug_folder_path);
+        seedpoint_graph.save_as_tgf(dfp + "/" + filename + "seedpoint_graph");
+        seedpoint_graph.save_as_lineset(dfp + "/" + filename + "seedpoint_graph");
+
+        auto poles = h->rsf->generatePoles();
+        poles.save(dfp + "/rsf_poles");
+    }
 }

@@ -105,6 +105,8 @@ class CubicalRidgeSurfaceFinderAPI:
         self.lib.CRSF_compute_finalize.argtypes = [CRSF_p]
         self.lib.CRSF_compute_finalize.restype = ctypes.POINTER(Surface)
 
+        self.lib.CRSF_save_debug_information.argtypes = [CRSF_p, ctypes.POINTER(ctypes.c_char)]
+
     def free_surface(self, surface_p):
         """
         Frees the memory allocated for a `Surface_C` object.
@@ -317,3 +319,19 @@ class CubicalRidgeSurfaceFinderAPI:
             return self.lib.CRSF_compute_finalize(crsf_p)
         except Exception as e:
             raise RuntimeError(f"Error computing or merging surface: {e}")
+        
+    def save_debug_information(self, csrf_p, debug_folder: str = "debug", filename: str = ""):
+        """
+        Save debug information in the given folder.
+        
+        :param crsf_p: Pointer to the `CubicalRidgeSurfaceFinder` instance.
+        :param debug_folder: path to the folder the data should be saved to.
+        :param filename: filename is the prefix given to the files.
+        :raises RuntimeError: If the computation fails.
+        """
+        try:
+            b_debug_folder = debug_folder.encode('utf-8')
+            b_filename = filename.encode('utf-8')
+            return self.lib.CRSF_save_debug_information(csrf_p, b_debug_folder, b_filename)
+        except Exception as e:
+            raise RuntimeError(f"Error when saving debug information: {e}")

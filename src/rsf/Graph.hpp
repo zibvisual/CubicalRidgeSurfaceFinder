@@ -1,5 +1,7 @@
 #pragma once
 
+#include <utils/IteratorEndSentinel.hpp>
+
 #include <unordered_map>
 #include <algorithm>
 #include <stdexcept>
@@ -18,48 +20,127 @@ namespace klenert
         class EdgeIterator
         {
         public:
-            using value_type = std::array<std::size_t, 2>;
+            using value_type = std::array<uint64_t, 2>;
+            using iterator_category = std::forward_iterator_tag;
+            using difference_type   = std::ptrdiff_t;
+            using pointer           = value_type;
+            using reference         = value_type;
 
-            EdgeIterator(const std::vector<std::unordered_map<std::size_t, E>>& vec)
-                : m_source(vec)
-                , m_source_current(0)
-                , m_target_current(m_source[m_source_current].cbegin())
-                , m_target_end(m_source[m_source_current].cend())
-            {}
+            using inner = std::unordered_map<uint64_t, E>;
+            using outer = std::unordered_map<uint64_t, inner>;
+
+            EdgeIterator(const outer& data)
+                : m_source_current(data.cbegin())
+                , m_source_end(data.cend())
+                , m_target_current(m_source_current->second.cbegin())
+                , m_target_end(m_source_current->second.cend())
+            {
+                clip();
+            }
+
+            EdgeIterator(const outer::const_iterator& outer_begin, const outer::const_iterator& outer_end, const inner::const_iterator& inner_begin, const inner::const_iterator& inner_end)
+            : m_source_current(outer_begin)
+            , m_source_end(outer_end)
+            , m_target_current(inner_begin)
+            , m_target_end(inner_end)
+            {
+                clip();
+            }
+
+            /**
+             * We want to guarantee that current() always returns a valid edge as long as the iterator returns true (e.g. is not finished).
+             * To achieve this, we must check for invalid states (m_target_current != m_target_end)
+             */
+            void clip() {
+                while (m_target_current == m_target_end)
+                {
+                    ++m_source_current;
+                    if (m_source_current == m_source_end)
+                    {
+                        return;
+                    }
+                    m_target_current = m_source_current->second.cbegin();
+                    m_target_end = m_source_current->second.cend();
+                }
+            }
+
+            void advance()
+            {
+                // only advance if we are not finished yet
+                if (m_source_current == m_source_end)
+                {
+                    return;
+                }
+
+                ++m_target_current;
+
+                // move to next valid m_target_current
+                clip();
+            }
+
+            bool finished() const
+            {
+                return m_source_current == m_source_end;
+            }
+
+            /** UB if called without checking if iterator is already finished */
+            value_type current() const
+            {
+                uint64_t from = m_source_current->first;
+                uint64_t to = m_target_current->first;
+                return { from, to }; 
+            }
 
             std::optional<value_type>
             next()
             {
-                if (m_source_current >= m_source.size())
+                if (finished())
                 {
                     return std::optional<value_type>();
                 }
 
-                while (m_target_current == m_target_end)
-                {
-                    ++m_source_current;
-                    if (m_source_current >= m_source.size())
-                    {
-                        return std::optional<value_type>();
-                    }
-                    m_target_current = m_source[m_source_current].cbegin();
-                    m_target_end = m_source[m_source_current].cend();
-                }
+                value_type val = current();
+                advance();
 
-                std::size_t from = m_source_current;
-                std::size_t to = m_target_current->first;
-                ++m_target_current;
-
-                return std::optional<value_type>({ from, to });
+                return std::optional<value_type>(val);
             }
 
-            // ADD_RANGE_TO_RUST_ITERATOR(EdgeIterator)
+            operator bool() const
+            {
+                return !finished();
+            }
+
+            reference operator*() const {
+                return current();
+            }
+            pointer operator->() { 
+                return current();
+            }
+
+            // Prefix increment
+            EdgeIterator& operator++() { advance(); return *this; }  
+
+            // Postfix increment
+            EdgeIterator operator++(int) 
+            { auto tmp = *this; ++(*this); return tmp; }
+
+            EdgeIterator
+            begin() const
+            {
+                return EdgeIterator(m_source_current, m_source_end, m_target_current, m_target_end);
+            }
+    
+            iter::IteratorEndSentinel
+            end() const
+            {
+                return {};
+            }
 
         protected:
-            const std::vector<std::unordered_map<std::size_t, E>>& m_source;
-            std::size_t m_source_current;
-            typename std::unordered_map<std::size_t, E>::const_iterator m_target_current;
-            typename std::unordered_map<std::size_t, E>::const_iterator m_target_end;
+            typename outer::const_iterator m_source_current;
+            typename outer::const_iterator m_source_end;
+            typename inner::const_iterator m_target_current;
+            typename inner::const_iterator m_target_end;
         };
 
         class NeighborIterator
@@ -190,6 +271,16 @@ namespace klenert
         numberOfNodes() const
         {
             return m_edges.size();
+        }
+
+        std::size_t
+        numberOfEdges() const
+        {
+            auto sum = 0;
+            for(auto list : m_edges){
+                sum += list->second.size();
+            }
+            return sum;
         }
 
         bool

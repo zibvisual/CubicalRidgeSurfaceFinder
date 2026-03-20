@@ -453,6 +453,37 @@ public:
         return arr;
     }
 
+    VecFloat center(Lattice lattice) const {
+        const auto gridPos = Lattice::gridLocationFromCIndex(voxel, lattice.dims());
+        const auto pos = lattice.worldPosition(gridPos);
+        const auto voxelsize = lattice.voxelsize();
+
+        if (direction == Direction::LEFT)
+        {
+            return pos - VecInt::RIGHT * voxelsize[0];
+        }
+        else if (direction == Direction::RIGHT)
+        {
+            return pos + VecInt::RIGHT * voxelsize[0];
+        }
+        else if (direction == Direction::DOWN)
+        {
+            return pos - VecInt::UP * voxelsize[1];
+        }
+        else if (direction == Direction::UP)
+        {
+            return pos + VecInt::UP * voxelsize[1];
+        }
+        else if (direction == Direction::BACKWARD)
+        {
+            return pos + VecInt::BACKWARD * voxelsize[2];
+        }
+        else
+        { //(direction == Direction::FORWARD)
+            return pos - VecInt::BACKWARD * voxelsize[2];
+        }
+    }
+
     // VecSize corner, Dims dims, VecFloat voxelSize, VecFloat fieldPosition
     std::array<VecFloat, 4> cornerPosition(Lattice lattice){
         const auto gridPos = Lattice::gridLocationFromCIndex(voxel, lattice.dims());

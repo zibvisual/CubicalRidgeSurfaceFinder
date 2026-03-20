@@ -19,6 +19,7 @@
 #include <surface/SurfaceUpdate.hpp>
 #include <utils/Lattice.hpp>
 #include <utils/ProgressbarReportHelper.hpp>
+#include <graph/SpatialGraph.hpp>
 
 #include "Seed.h"
 #include "Faces.hpp"
@@ -68,14 +69,24 @@ namespace ridgesurface
         // Seed changes
         std::size_t numOfSeeds() const;
         uint64_t addSeed(Seed seed);
-        // add a seedpoint automatically, if possible (if no seedpoint was set, returns None)
-        std::optional<uint64_t> addSeed(float minDistanceRel, float maxDistanceNewSeed);
         void updateSeed(uint64_t id, Seed seed);
         bool removeSeed(uint64_t id);
         void clearSeeds();
         // Used in load operations, such that we can use a diff algorithm. 
         // Currently naive implementation and such takes O(n²) time.
         std::vector<uint64_t> newSeeds(std::vector<Seed>& seeds);
+
+        // get a suggested seedpoint, if possible (if no seedpoint was set, returns None)
+        std::optional<VecFloat> getSeedpointCandidate(float minDistanceRel);
+        // get a suggested seedpoint which is also allowed to be shifet (at most distance)
+        std::optional<VecFloat> getSeedpointCandidate(float minDistanceRel, float distance);
+
+        /**
+         * @brief Move the given point in the direction of the ridge (use of FM).
+         * 
+         * A good heuristic for the distance of the moving point is 10% of the patch distance. 
+         */ 
+        VecFloat movePointToRidge(VecFloat point, float distance);
 
         int removeSeedpointCandidates();
         int removeSeedpointCandidates(float minDistance);
@@ -95,7 +106,7 @@ namespace ridgesurface
          */
         void finalize(surface::StaticSurface* surface);//, HxSpatialGraph* graph);
 
-        // Debug
+        // --------  Debug ------------------
         // void castToTwoLabels(unsigned char* labels);
         // void castCurrentSeedLabels(unsigned char* labels);
         void castToLabels(uint16_t* labels);
@@ -103,6 +114,10 @@ namespace ridgesurface
         // void castToSpatialGraph(HxSpatialGraph* graph);
         void castToTime(float* time) const;
         void castToDistance(float* distance) const;
+
+        SpatialGraph generateSeedpointGraph() const;
+        LineSet<std::tuple<uint64_t, int8_t>> generatePoles() const;
+
 
         // void computeColoringOfSphere(std::size_t i, std::unordered_map<futil::Face, std::size_t>& map);
         // void computeIntegralCurves(std::size_t i, std::unordered_set<int64_t>& first, std::unordered_set<int64_t>& second);
@@ -185,6 +200,9 @@ namespace ridgesurface
         std::unordered_map<Face, float>* ts_sphere_distance;
         std::unordered_set<int64_t>* ts_integralcurve1;
         std::unordered_set<int64_t>* ts_integralcurve2;
+        
+        // optional memory saved for each patch
+        std::unordered_map<uint64_t, std::array<VecFloat, 2>> ts_poles;
 
         // Fast Marching object
         using MappingView = mutil::HashMapMappingView<SmallHashMap<int64_t, float>>;
