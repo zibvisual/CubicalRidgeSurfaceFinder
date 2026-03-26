@@ -1263,7 +1263,7 @@ template <typename T>
 using GetPropagateOnContainerSwap = typename T::propagate_on_container_swap;
 
 template <typename T>
-using GetIsAlwaysEqual = typename T::is_always_equal;
+using GetIsAlwaysEqual = std::allocator_traits<T>::is_always_equal;
 
 template <typename T>
 struct GetFirstArg;
