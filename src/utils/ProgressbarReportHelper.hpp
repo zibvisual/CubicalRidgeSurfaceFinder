@@ -108,6 +108,10 @@ namespace progressbar
         Progressbar():m_reportlevel(ProgressbarReportLevel::FullReport){}
         Progressbar(ProgressbarReportLevel level):m_reportlevel(level){}
 
+        void level(ProgressbarReportLevel level){
+            m_reportlevel = level;
+        }
+
         void start(const std::string& str){
             ++m_processlevel;
             if(m_tasklevel != m_processlevel - 1){

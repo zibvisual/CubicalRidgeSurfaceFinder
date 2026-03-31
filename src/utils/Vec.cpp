@@ -178,6 +178,16 @@ VecFloat VecFloat::floor() const
     );
 }
 
+float VecFloat::min() const
+{
+    return std::min(std::min(m_values[0], m_values[1]), m_values[2]);
+}
+
+float VecFloat::max() const
+{
+    return std::max(std::max(m_values[0], m_values[1]), m_values[2]);
+}
+
 VecFloat VecFloat::min(float min) const
 {
     return VecFloat(
@@ -210,15 +220,23 @@ bool VecFloat::operator==(const VecFloat& rhs) const {
 }
 
 bool VecFloat::equals(const VecFloat& rhs, const float epsilon /*= 0.0001*/) const {
-    return abs(m_values[0] - rhs.m_values[0]) + abs(m_values[1] - rhs.m_values[1]) + abs(m_values[2] - rhs.m_values[2]) < epsilon;
+    return (std::abs(m_values[0] - rhs.m_values[0]) + std::abs(m_values[1] - rhs.m_values[1]) + std::abs(m_values[2] - rhs.m_values[2])) < epsilon;
 }
 
-VecFloat VecFloat::operator+(VecFloat const& other) const {
+const VecFloat VecFloat::operator+(const VecFloat& other) const {
     return VecFloat(
         other.x() + m_values[0],
         other.y() + m_values[1],
         other.z() + m_values[2]
     );
+}
+
+VecFloat& VecFloat::operator+=(const VecFloat& other)
+{
+    this->m_values[0] += other[0];
+    this->m_values[1] += other[1];
+    this->m_values[2] += other[2];
+    return *this;
 }
 
 const VecFloat VecFloat::operator-(const VecFloat &other) const
@@ -268,6 +286,20 @@ VecFloat::operator VecSize() const {
         static_cast<std::size_t>(m_values[1]),
         static_cast<std::size_t>(m_values[2])
     );
+}
+
+float VecFloat::length2() const
+{
+    return m_values[0] * m_values[0] + m_values[1] * m_values[1] + m_values[2] * m_values[2];
+}
+
+float VecFloat::length() const
+{
+    return sqrt(length2());
+}
+
+float VecFloat::distance(const VecFloat& other) const {
+    return ((*this) - other).length();
 }
 
 bool VecFloat::lexicographic_order_exact(const VecFloat& other) const {

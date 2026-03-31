@@ -1,5 +1,6 @@
 #include "src/rsf/CubicalRidgeSurfaceFinder.h"
 #include "src/utils/SeedSampler.hpp"
+#include <io/vertexset.hpp>
 
 namespace ridgesurface {
     class CubicalRidgeSurfaceFinder;
@@ -28,11 +29,34 @@ struct Surface_C {
     surface::StaticSurface* surf_ptr;
 };
 
+// Class for Surface Updates
+struct SurfaceUpdate_C {
+    VecFloat_C* points;
+    size_t num_points;
+    Triangle_C* triangles;
+    size_t num_triangles;
+    // TODO: further fields
+};
+
 // Class for handling memory
 struct CRSF_Handle {
-    progressbar::Progressbar* progress;
-    ridgesurface::CubicalRidgeSurfaceFinder* rsf;
-    RawFieldView<float>* raw;
+    progressbar::Progressbar progress;
+    ridgesurface::CubicalRidgeSurfaceFinder rsf;
+    RawFieldView<float> raw;
+    surface::SurfaceUpdate update;
+
+    CRSF_Handle()
+    : progress(progressbar::Progressbar())
+    , rsf(ridgesurface::CubicalRidgeSurfaceFinder(progress))
+    , raw((RawFieldView<float>(nullptr, Dims(0))))
+    , update()
+    {}
+
+    // ~CRSF_Handle(){
+    //     if(raw){
+    //         delete raw;
+    //     }
+    // }
 };
 
 extern "C" {
@@ -42,35 +66,23 @@ extern "C" {
      * @param s The `StaticSurface` object containing the points and triangles to transform.
      * @return A `Surface_C` object representing the same data from `StaticSurface`, 
      *         but in a C-compatible format.
+     * 
+     * Both objects point to the same memory location. Ownership belongs to `Surface_C` 
+     * and `free_surface` must be called.
      */
     Surface_C surface_to_c(surface::StaticSurface* s) {
         Surface_C out; 
         out.num_points = s->points().size(); 
-        // out.points = new VecFloat_C[out.num_points]; 
-        const auto& points = s->points(); 
-        out.points = reinterpret_cast<VecFloat_C*>(const_cast<VecFloat*>(points.data())); 
-        // for (size_t i = 0; i < out.num_points; ++i) {
-        // out.points[i].x = points[i].x(); 
-        // out.points[i].y = points[i].y(); 
-        // out.points[i].z = points[i].z(); 
-        // } 
+        out.points = reinterpret_cast<VecFloat_C*>(const_cast<VecFloat*>(s->points().data()));
+
         out.num_triangles = s->number_of_trianlges(); 
-        // out.triangles = new Triangle_C[out.num_triangles]; 
-        const auto& triangles = s->triangles(); 
-        out.triangles = reinterpret_cast<Triangle_C*>(const_cast<surface::SimpleTriangle*>(triangles.data())); 
-        // for (size_t i = 0; i < out.num_triangles; ++i) { 
-        // out.triangles[i].v0 = triangles[i][0]; 
-        // out.triangles[i].v1 = triangles[i][1]; 
-        // out.triangles[i].v2 = triangles[i][2]; 
-        // } 
+        out.triangles = reinterpret_cast<Triangle_C*>(const_cast<surface::SimpleTriangle*>(s->triangles().data())); 
         out.surf_ptr = s; 
         return out; 
     }
 
-
     /**
-     * @brief Frees the memory allocated for a `Surface_C` object and 
-     * for a `StaticSurface` object (if exists).
+     * @brief Frees the memory allocated for a `Surface_C` object.
      * @param s A pointer to a `Surface_C` object whose memory will be freed.
      */
     void free_surface(Surface_C* s) {
@@ -84,45 +96,39 @@ extern "C" {
     }
 
     /**
+     * @brief Transforms a `SurfaceUpdate` object into a `SurfaceUpdate_C` type. 
+     * @param s The `SurfaceUpdate` object.
+     * @return A `SurfaceUpdate_C` object representing the same data from `SurfaceUpdate`, 
+     *         but in a C-compatible format.
+     * 
+     * Both objects point to the same memory location. Ownership has the original `SurfaceUpdate`.
+     */
+    SurfaceUpdate_C surface_update_to_c(surface::SurfaceUpdate* update) {
+        SurfaceUpdate_C out; 
+        out.num_points = update->m_points.size();
+        const auto& points = reinterpret_cast<VecFloat_C*>(update->m_points.data()); 
+
+        out.num_triangles = update->m_triangles.size(); 
+        out.triangles = reinterpret_cast<Triangle_C*>(update->m_triangles.data());  
+        return out;
+    }
+
+    /**
      * @brief Constructor for `CubicalRidgeSurfaceFinder` and `CRSF_Handle` classes.
      * @return Pointer to the `CRSF_Handle` object.
      */ 
     CRSF_Handle* CRSF_new() { 
-        auto* progress = new progressbar::Progressbar();
-        auto* rsf = new ridgesurface::CubicalRidgeSurfaceFinder(*progress);
-
-        CRSF_Handle* h = new CRSF_Handle();
-        h->progress = progress;
-        h->rsf = rsf;
-        h->raw = nullptr;
-        return h;
+        return new CRSF_Handle();
     }
 
     /**
-     * @brief Destructor for `CRSF_Handle` object. It also deletes the `RawfieldView`, 
-     * `Progressbar` and `CubicalRidgeSurfaceFinder` objects.
+     * @brief Destructor for `CRSF_Handle` object.
      * @param h A pointer to the `CRSF_Handle` object.
      */ 
     void CRSF_delete(CRSF_Handle* h) {
-    if (!h) return;
-
-    if (h->raw) {
-        delete h->raw;
-        h->raw = nullptr;
+        if (!h) return;
+        delete h;
     }
-
-    if (h->rsf) {
-        delete h->rsf;
-        h->rsf = nullptr;
-    }
-
-    if (h->progress) {
-        delete h->progress;
-        h->progress = nullptr;
-    }
-
-    delete h;
-}
 
     /**
      * @brief Set the input image for a `CubicalRidgeSurfaceFinder` object.
@@ -131,16 +137,8 @@ extern "C" {
      * @param width, height, depth Dimensions of the input image (in voxels).
      */ 
     void CRSF_setImage(CRSF_Handle* h, float* data, int width, int height, int depth) {
-
-        if (!h) return;
-
-        // Delete old raw if exists
-        if (h->raw) delete h->raw;
-
-        //std::vector<float> vec(data, data + width * height * depth);
-        h->raw = new RawFieldView<float>(data, Dims(width, height, depth));
-
-        h->rsf->setInput(h->raw);
+        h->raw = RawFieldView<float>(data, Dims(width, height, depth));
+        h->rsf.setInput(&h->raw);
     }
 
     /**
@@ -152,18 +150,12 @@ extern "C" {
      * @param vsize Image voxel size.
      */ 
     void CRSF_setImage_bbox(CRSF_Handle* h, float* data, int width, int height, int depth, VecFloat_C origin_c, VecFloat_C vsize_c) {
-
-        if (!h) return;
-
-        // Delete old raw if exists
-        if (h->raw) delete h->raw;
-
         VecFloat origin(origin_c.x, origin_c.y, origin_c.z);
         VecFloat vsize(vsize_c.x, vsize_c.y, vsize_c.z);
 
-        h->raw = new RawFieldView<float>(data, Lattice(Dims(width, height, depth), origin, vsize));
+        h->raw = RawFieldView<float>(data, Lattice(Dims(width, height, depth), origin, vsize));
 
-        h->rsf->setInput(h->raw);
+        h->rsf.setInput(&h->raw);
     }
 
     /**
@@ -173,7 +165,7 @@ extern "C" {
      * @param max Maximum threshold value.
      */
     void CRSF_setThreshold(CRSF_Handle* h, float min, float max) {
-        h->rsf->setThresholds(min, max);
+        h->rsf.setThresholds(min, max);
     }
 
     /**
@@ -182,7 +174,7 @@ extern "C" {
      * @return The minimum threshold value.
      */
     float CRSF_getMinThreshold(CRSF_Handle* h) {
-        return h->rsf->getMin();
+        return h->rsf.getMin();
     }
 
     /**
@@ -191,7 +183,7 @@ extern "C" {
      * @return The maximum threshold value.
      */
     float CRSF_getMaxThreshold(CRSF_Handle* h) {
-        return h->rsf->getMax();
+        return h->rsf.getMax();
     }
 
     /**
@@ -205,7 +197,7 @@ extern "C" {
         ridgesurface::SeedPoint sp(VecFloat(x, y, z));
         ridgesurface::Seed seed(sp, distance);
 
-        h->rsf->addSeed(seed);
+        h->rsf.addSeed(seed);
     }
 
     /**
@@ -223,14 +215,14 @@ extern "C" {
      *         A valid seed is one with a relative distance greater than `minDistanceRel`.
      */
     int CRSF_addAutomaticSeeds(CRSF_Handle* h, float minDistanceRel, float maxDistanceNewSeed) {
-        auto candidate = h->rsf->getSeedpointCandidate(minDistanceRel, maxDistanceNewSeed*0.05);
+        auto candidate = h->rsf.getSeedpointCandidate(minDistanceRel, maxDistanceNewSeed*0.05);
         if(!candidate.has_value()){
             return -1;
         }
         // seedpoint creation
         ridgesurface::SeedPoint sp(candidate.value());
         ridgesurface::Seed seed(sp, maxDistanceNewSeed);
-        return h->rsf->addSeed(seed);
+        return h->rsf.addSeed(seed);
     }
 
     /**
@@ -239,7 +231,7 @@ extern "C" {
      * @param h Pointer to the `CRSF_Handle` object.
      */
     void CRSF_clearSeedPoints(CRSF_Handle* h) {
-        h->rsf->clearSeeds();
+        h->rsf.clearSeeds();
     }
 
     /**
@@ -250,25 +242,27 @@ extern "C" {
      * @param threshold Threshold for a voxel to be considered as a candidate seed.
      * @param distance The maximum distance to propagate during the Fast Marching algorithm.
      */
-    void CRSF_seedSampler(CRSF_Handle* h, float threshold, float distance)
+    uint64_t CRSF_seedSampler(CRSF_Handle* h, float threshold, float distance)
     {
-        if (h->raw) {
-            Dims dims = h->raw->getDims();
-            auto lattice = h->raw->lattice();
-
-            std::vector<uint32_t> result = sample(h->raw->data(), dims, threshold);
-
-            for (std::size_t i = 0; i < result.size(); ++i) {
-                VecSize gridLoc = Lattice::gridLocationFromCIndex(result[i], dims);
-                VecFloat worldPos = lattice.worldPosition(gridLoc);
-                float x = worldPos.x();
-                float y = worldPos.y();
-                float z = worldPos.z();
-                CRSF_addSeed(h, x, y, z, distance);
-            }
-        }
-        else
+        if (h->rsf.data() == nullptr){
             throw std::runtime_error("CRSF_seedSampler error: no image set in CRSF.");
+        }
+
+        Dims dims = h->raw.getDims();
+        auto lattice = h->raw.lattice();
+
+        std::vector<uint32_t> result = sample(h->raw.data(), dims, threshold);
+
+        for (std::size_t i = 0; i < result.size(); ++i) {
+            VecSize gridLoc = Lattice::gridLocationFromCIndex(result[i], dims);
+            VecFloat worldPos = lattice.worldPosition(gridLoc);
+            float x = worldPos.x();
+            float y = worldPos.y();
+            float z = worldPos.z();
+            CRSF_addSeed(h, x, y, z, distance);
+        }
+        
+        return result.size();
     }
 
 
@@ -278,27 +272,32 @@ extern "C" {
      * This function clears any previous surface data, including seed points and surface patches,
      * and then recalculates the ridge surface patches based on the current seeds.
      * @param h Pointer to the `CRSF_Handle` object.
-     * @return The number of processed seeds (either the last index if interrupted or the total number of seeds).
+     * @return View to the UpdateSurface object. View is invalid if `calculate` or `recalculate` is called.
      */
-    void CRSF_recalculate(CRSF_Handle* h) {
-        h->rsf->recalculate();
+    SurfaceUpdate_C CRSF_recalculate(CRSF_Handle* h) {
+        h->update = h->rsf.recalculate();
+        return surface_update_to_c(&h->update);
     }
 
     /**
      * @brief Computes the surface using Fast Marching algorithm;
      * @param h Pointer to the `CRSF_Handle` object.
+     * @return View to the UpdateSurface object. View is invalid if `calculate` or `recalculate` is called.
      */
-    void CRSF_compute(CRSF_Handle* h) {
-        h->rsf->calculate();
+    SurfaceUpdate_C CRSF_calculate(CRSF_Handle* h) {
+        h->update = h->rsf.calculate();
+        return surface_update_to_c(&h->update);
     }
 
     /**
      * @brief Computes the surface using Fast Marching algorithm and merges all the patches.
      * @param h Pointer to the `CRSF_Handle` object.
      * @return A pointer to a `Surface_C` struct containing the final computed surface data.
+     * 
+     * Caller gets the ownership of the data and must call free_surface when the data is not needed anymore.
      */
-    Surface_C* CRSF_compute_finalize(CRSF_Handle* h) {
-        h->rsf->calculate();
+    Surface_C* CRSF_finalize(CRSF_Handle* h) {
+        h->rsf.calculate();
         // surface::StaticSurface surface;
         // rsf->finalize(&surface);
 
@@ -307,7 +306,7 @@ extern "C" {
         // *out = surface_to_c(surface);
         
         surface::StaticSurface* surface = new surface::StaticSurface;
-        h->rsf->finalize(surface);
+        h->rsf.finalize(surface);
 
         // Convert to a `Surface_C` struct
         Surface_C* out = new Surface_C;
@@ -317,17 +316,24 @@ extern "C" {
     }
 
     /**
+     * @brief Currently used for debugging purposes. Might be deleted at any time.
+     * @param h Pointer to the `CRSF_Handle` object.
+     * 
+     * Saves all patches given by the current surface update. 
+     * If called every time after recalculate/calculate, all generated patches are saved.
+     */
+    void CRSF_write_surface_update(CRSF_Handle* h, char* output_path) {
+        auto filestem = std::string(output_path);
+        h->update.save_each_patch(filestem);
+    }
+
+    /**
      * @brief Saves debug data.
      * @param h Pointer to the `CRSF_Handle` object.
      */
-    void CRSF_save_debug_information(CRSF_Handle* h, char* debug_folder_path, char* filename) 
+    void CRSF_save_debug_information(CRSF_Handle* h, char* output_path) 
     {
-        auto seedpoint_graph = h->rsf->generateSeedpointGraph();
-        auto dfp = std::string(debug_folder_path);
-        seedpoint_graph.save_as_tgf(dfp + "/" + filename + "seedpoint_graph");
-        seedpoint_graph.save_as_lineset(dfp + "/" + filename + "seedpoint_graph");
-
-        auto poles = h->rsf->generatePoles();
-        poles.save(dfp + "/rsf_poles");
+        auto op = std::string(output_path);
+        h->rsf.save_debug_information(op);
     }
 }

@@ -1,6 +1,7 @@
 #include "CubicalRidgeSurfaceFinder.h"
 #include <utils/Vec.hpp>
 #include <utils/Dims.hpp>
+#include <io/vertexset.hpp>
 
 #include "Flooding.hpp"
 #include "Amanatides.hpp"
@@ -102,6 +103,11 @@ namespace ridgesurface
         resetFields();
     }
 
+    const RawFieldView<float>* CubicalRidgeSurfaceFinder::data() const
+    {
+        return m_probability;
+    }
+
     void
     CubicalRidgeSurfaceFinder::setThresholds(float min, float max)
     {
@@ -137,6 +143,16 @@ namespace ridgesurface
     const CubicalRidgeSurfaceFinder& CubicalRidgeSurfaceFinder::as_const() const
     {
         return *this;
+    }
+
+    SeedInSurfaceIterator CubicalRidgeSurfaceFinder::seedsInSurface() const
+    {
+        return SeedInSurfaceIterator(m_seeds.begin(), m_seeds.end(), m_seeds_in_surface);
+    }
+
+    SeedAdditionIterator CubicalRidgeSurfaceFinder::seedsAddition() const
+    {
+        return SeedAdditionIterator(m_seeds.begin(), m_seeds.end(), m_seeds_in_surface);
     }
 
     const Seed&
@@ -187,6 +203,7 @@ namespace ridgesurface
         int64_t max_id = -1;
         float max = 0;
         int index = -1;
+        int pos = -1;
         for (std::size_t i = 0; i < m_seedpoints_candidates.size(); ++i)
         {
             for (std::size_t j = 0; j < m_seedpoints_candidates[i].size(); ++j)
@@ -201,13 +218,20 @@ namespace ridgesurface
                     max = f;
                     max_id = voxel;
                     index = i;
+                    pos = j;
                 }
             }
         }
         if (max < minDistanceRel || max_id < 0)
         {
+            // we can remove all seed point candidates!
             return {};
         }
+
+        // remove the candidate we return (so it can't be taken twice) [swap and pop]
+        std::swap(m_seedpoints_candidates[index][pos], m_seedpoints_candidates[index].back());
+        m_seedpoints_candidates[index].pop_back();
+
         auto point = m_lattice.worldPosition(Lattice::gridLocationFromCIndex(static_cast<std::size_t>(max_id), m_lattice.dims()));
         return point;
         // return addSeed(Seed::Seedpoint(point, maxDistanceNewSeed));
@@ -387,6 +411,7 @@ namespace ridgesurface
         for(auto point : m_seeds){
             graph.add_point(point.first, point.second.firstPoint());
         }
+        auto iter = m_graph.edges();
         for(auto edge : m_graph.edges()){
             graph.add_edge(edge[0], edge[1]);
         }
@@ -396,15 +421,59 @@ namespace ridgesurface
     LineSet<std::tuple<uint64_t, int8_t>> CubicalRidgeSurfaceFinder::generatePoles() const
     {
         auto builder = LineSetBuilder<std::tuple<uint64_t, int8_t>>();
-        builder.reserve_lines(ts_poles.size());
+        builder.reserve_lines(m_debug_poles.size());
 
-        for(auto entry : ts_poles){
+        for(auto entry : m_debug_poles){
+            if(!m_seeds.contains(entry.first)){
+                continue;
+            }
             builder.add_point(entry.second[0], {entry.first, -1});
             builder.add_point(m_seeds.at(entry.first).firstPoint(), {entry.first, 0});
             builder.add_point(entry.second[1], {entry.first, +1});
             builder.push_line();
         }
         return builder.build();
+    }
+
+    void CubicalRidgeSurfaceFinder::save_debug_information(std::string op) const {
+        // seedpoint additions
+        std::vector<float> data;
+        std::vector<VecFloat> points;
+        for(auto seed : seedsAddition())
+        {
+            data.push_back(seed.getDistance());
+            points.push_back(seed.firstPoint());
+        }
+        if(points.size() > 0)
+        {
+            auto d = vertex_data<float>{points, data};
+            write_vertexset(op + "seeds_to_add", d);
+        }
+        data.clear();
+        points.clear();
+
+        // seedpoints in surface
+        for(auto seed : seedsInSurface())
+        {
+            data.push_back(seed.getDistance());
+            points.push_back(seed.firstPoint());
+        }
+        if(points.size() > 0)
+        {
+            auto d = vertex_data<float>{points, data};
+            write_vertexset(op + "seeds_in_surface", d);
+        }
+        data.clear();
+        points.clear();
+
+        // seedpoint graph
+        auto seedpoint_graph = generateSeedpointGraph();
+        seedpoint_graph.save_as_tgf(op + "seedpoint_graph");
+        seedpoint_graph.save_as_lineset(op + "seedpoint_graph");
+
+        // poles
+        auto poles = generatePoles();
+        poles.save(op + "/rsf_poles");
     }
 
     // void
@@ -547,12 +616,35 @@ namespace ridgesurface
     //     return m_fm.distance().get(face.startId());
     // }
 
-    void
+    // calculates excentricity of m_patch
+    float CubicalRidgeSurfaceFinder::calculateExcentricity(uint64_t seed) const
+    {
+        auto point_sum = VecFloat();
+        for(auto face_id : m_patch){
+            auto face = Face::fromIndex(face_id);
+            point_sum += face.center(m_lattice);
+        }
+        float dist = (point_sum / m_patch.size()).distance(m_seeds.at(seed).firstPoint());
+        // normalize
+        return dist / (m_seeds.at(seed).getDistance() * m_lattice.voxelsize().length());
+
+    }
+
+    bool
     CubicalRidgeSurfaceFinder::updateInsert(uint64_t id)
     {
         grow(id);
-        // check m_patch
-        // std::cout << "DEBUG: Found " << m_patch.size() << " faces!" << std::endl;
+
+        // check excentricity of patch and if they should be discarded or not
+        float excentricity = calculateExcentricity(id);
+        m_debug_excentricity[id] = excentricity;
+        const float threshold = 0.25f;
+        if(excentricity > threshold){
+            // skip patch
+            std::cout << "Skipped patch " << id << " as excentricity is " << excentricity << std::endl;
+            return false;
+        }
+
         merge(id);
         addPatch(id);
         // save the voxels we are looking at
@@ -564,6 +656,8 @@ namespace ridgesurface
         // other considerations:
         // save possible candidates -> this is done in addPatch!
         // m_graph is changed in update_neighbor_graph
+
+        return true;
     }
 
     void
@@ -621,7 +715,9 @@ namespace ridgesurface
             }
             if(m_seeds.contains(id)){
                 // add/update patch
-                updateInsert(id);
+                if(!updateInsert(id)){
+                    m_seeds.erase(id);
+                }
             }
             iter = m_seeds_update.erase(iter);
             m_progressbar.update(++counter/static_cast<float>(size));
@@ -685,9 +781,18 @@ namespace ridgesurface
 
         auto it = face_graph.borderBegin();
         auto end = face_graph.borderEnd();
+
+        // only insert candidates if not at the image border (min of 5% of distance to march or 5% of image size)
+        const float border_distance_threshold = m_lattice.voxelsize().length() * std::min(m_seeds[id].getDistance(), m_lattice.centerbox().min()) * 0.1;
         while (it != end)
         {
-            m_seedpoints_candidates[id].push_back(*it);
+            // check distance to image border
+            auto face = Face::fromIndex(*it);
+            auto point = face.center(m_lattice);
+            if(m_lattice.distanceToImageBorder(point) > border_distance_threshold)
+            {
+                m_seedpoints_candidates[id].push_back(*it);
+            }
             ++it;
         }
 
@@ -711,10 +816,16 @@ namespace ridgesurface
 
         int counter = 0;
         m_progressbar.start("Extracting Ridge Surface Patches");
-        for (auto &pair : m_seeds)
+
+        auto iter = m_seeds.begin();
+        while (iter != m_seeds.end())
         {
-            updateInsert(pair.first);
-            ++counter;
+            if(!updateInsert(iter->first)){
+                iter = m_seeds.erase(iter);
+            }else{
+                ++iter;
+                ++counter;
+            }
             if (m_progressbar.stop_and_end()) return m_surface_update.build();
             m_progressbar.update(static_cast<float>(counter) / m_seeds.size());
             m_progressbar.update(fmt::format("Calculating Patches ({:d} / {:d})", counter, m_seeds.size()));
@@ -1162,6 +1273,10 @@ namespace ridgesurface
     void
     CubicalRidgeSurfaceFinder::grow(uint64_t id)
     {
+        // clear up last iteration
+        m_label_view.clear();
+        m_patch.clear();
+
         Seed seed = m_seeds[id];
         auto dims = m_lattice.dims();
         auto voxelSize = m_probability->lattice().voxelsize();
@@ -1311,7 +1426,7 @@ namespace ridgesurface
         waterstream.clear();
         // std::cout << "poles calculated" << std::endl;
         // TODO: TS: COPY
-        ts_poles[id] = {firstFace.center(m_lattice), secondFace.center(m_lattice)};
+        m_debug_poles[id] = {firstFace.center(m_lattice), secondFace.center(m_lattice)};
 
         // now we can create the surface of m_time and split them with firstFace and secondFace
         // as we have only two sinks and their places are already known, we can use a flooding algorithm instead of merging of union-find structures.
@@ -1335,7 +1450,9 @@ namespace ridgesurface
         if(flooding.streamflood({ firstFace, secondFace }))
         {
             // TODO: make this error more formal (not just an std::cout output)
-            std::cout << "could not generate patch " << id << " , as both poles contain the same locale minima" << std::endl;
+            std::cout << "could not generate patch " << id << " with seed point " << m_seeds[id].firstPoint() << " , as both poles contain the same locale minima" << std::endl;
+            // TODO: somehow this return creates a "stuck" algo where each other iteration also ends here...
+            return;
         }
 
         auto& mapping = flooding.regions();
@@ -1381,9 +1498,6 @@ namespace ridgesurface
             return face_cost(left) < face_cost(right);
         };
         auto heap = boost::heap::priority_queue<Face, boost::heap::compare<decltype(face_compare)>>(face_compare);
-
-        m_label_view.clear();
-        m_patch.clear();
 
         // set all faces (could be done by constructor and iterator)
         for (auto pair : mapping)

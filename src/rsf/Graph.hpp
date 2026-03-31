@@ -32,10 +32,14 @@ namespace klenert
             EdgeIterator(const outer& data)
                 : m_source_current(data.cbegin())
                 , m_source_end(data.cend())
-                , m_target_current(m_source_current->second.cbegin())
-                , m_target_end(m_source_current->second.cend())
+                , m_target_current()
+                , m_target_end()
             {
-                clip();
+                if(m_source_current != m_source_end){
+                    m_target_current = m_source_current->second.cbegin();
+                    m_target_end = m_source_current->second.cend();
+                    clip();
+                }
             }
 
             EdgeIterator(const outer::const_iterator& outer_begin, const outer::const_iterator& outer_end, const inner::const_iterator& inner_begin, const inner::const_iterator& inner_end)
@@ -44,7 +48,9 @@ namespace klenert
             , m_target_current(inner_begin)
             , m_target_end(inner_end)
             {
-                clip();
+                if(m_source_current != m_source_end){
+                    clip();
+                }
             }
 
             /**

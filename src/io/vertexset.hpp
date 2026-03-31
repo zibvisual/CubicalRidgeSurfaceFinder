@@ -11,7 +11,7 @@
 #include <exception>
 
 /** 
- * Class to read and write simple vertexsets. Not all features are supported.
+ * Class to read and write simple vertexsets.
  */
 template <class T>
 struct vertex_data {

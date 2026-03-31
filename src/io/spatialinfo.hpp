@@ -29,12 +29,12 @@ public:
     SpatialInformation(CornerBBox bbox, bool signal_bbox = false):m_min(bbox.min_corner()),m_other(bbox.max_corner()),m_signal(signal_bbox),m_bbox(true){}
 
     static SpatialInformation fromArguments(std::optional<CornerBBox> bbox, std::optional<VecFloat> origin, std::optional<VecFloat> voxelsize, std::optional<bool> bbox_signal = false, std::optional<bool> origin_signal = true){
-        // if we have origin and voxelsize, we use these
+        // if we have origin and voxelsize, we use these (default being the signal orgigin)
         if(origin.has_value() && voxelsize.has_value()){
             return SpatialInformation(origin.value(), voxelsize.value(), origin_signal.value_or(true));
         }
 
-        // otherwise use the bbox
+        // otherwise use the bbox (default being the voxel corners (no signal))
         if(bbox.has_value()){
             return SpatialInformation(bbox.value(), bbox_signal.value_or(false));
         }
@@ -120,13 +120,15 @@ public:
         }else{
             voxelsize = m_other;
         }
-        // now calculate the origin 
+        // now calculate the origin
         VecFloat origin = m_signal ? m_min : m_min + (voxelsize * 0.5f);
         return Lattice(dims, origin, voxelsize);
     }
 private:
     VecFloat m_min;
+    // either max or voxelsize (if m_bbox true -> max)
     VecFloat m_other;
+    // if the m_min and m_other represent the location of the signal or the corner of the voxel
     bool m_signal = true;
     bool m_bbox = false;
 };

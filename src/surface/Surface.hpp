@@ -50,15 +50,19 @@ namespace surface {
         , point_end(point_end)
         , triangle_start(triangle_start)
         , triangle_end(triangle_end) {}
+
+        bool empty() const {
+            return point_start == point_end;
+        }
     };
 
     /**
-     * A triangulated surface mesh with patches (triangle groups). Triangles have a patch id.
-     * A list of PatchInformation is also given. They contain the patch_id and if the orientation of the patch is flipped.
-     * If a patch id is not contained in the PatchInformation list, one may assume the patch to be deleted and not used anymore.
+     * A triangulated surface mesh with patches (triangle groups).
      * 
      * Invariant: patches are in a block within m_trianlges. That is, except for patch -1, all patches are contained in a range/slice.
      * Invariant: Each point and each triangle belong to exactly one patch.
+     * Invariant: The indices of the triangles are relative to the patch start!
+     * 
      */
     class Surface {
     public:
@@ -88,20 +92,17 @@ namespace surface {
             write_wavefront(output_path, m_points, m_triangles);
         }
 
-        void save_each_patch(std::filesystem::path stem) const {
+        void save_each_patch(std::filesystem::path path, bool save_empty_patches = false) const {
             for(const auto& patch : m_patches){
-                if(patch.deleted){
+                if(patch.deleted || (!save_empty_patches && patch.empty())){
                     continue;
                 }
 
-                auto filename = stem.stem();
-                filename += "_patch_" + std::to_string(patch.id) + ".";
-                filename += stem.extension();
-
+                auto output = add_suffix(path, "_patch_" + std::to_string(patch.id));
                 // iterarate and create spans
                 auto points = std::span(m_points.cbegin() + patch.point_start, m_points.cbegin() + patch.point_end);
                 auto triangles = std::span(m_triangles.cbegin() + patch.triangle_start, m_triangles.cbegin() + patch.triangle_end);
-                write_wavefront(filename, points, triangles);
+                write_wavefront(output, points, triangles);
             }
         }
 
@@ -257,10 +258,7 @@ namespace surface {
             // add triangles
             auto triangle_start = m_triangles.size();
             m_triangles.reserve(m_triangles.size() + update.m_triangles.size());
-            for(auto triangle : update.m_triangles){
-                triangle.index_translate(point_start);
-                m_triangles.push_back(triangle);
-            }
+            m_triangles.insert(m_triangles.end(), update.m_triangles.begin(), update.m_triangles.end());
 
             // set patch id
             for(const auto& addition : update.m_additions){

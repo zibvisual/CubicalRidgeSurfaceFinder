@@ -111,6 +111,11 @@ public:
     inline float z() const {return m_values[2];}
 
     VecFloat floor() const;
+    /** Return the minimal component value */
+    float min() const;
+    float max() const;
+
+    /** Return a vec with the minimum of the vec component and the given scalar */
     VecFloat min(float min) const;
     VecFloat max(float max) const;
     VecFloat clamp(float min, float max) const;
@@ -121,14 +126,20 @@ public:
     bool operator==(const VecFloat& rhs) const;
     bool equals(const VecFloat& rhs, const float epsilon = 0.0001) const;
 
-    VecFloat operator+(VecFloat const& other) const;
-    const VecFloat operator-(const VecFloat &other) const;
+    const VecFloat operator+(const VecFloat& other) const;
+    const VecFloat operator-(const VecFloat& other) const;
     const VecFloat operator*(const float &other) const;
     const VecFloat operator*(const VecFloat &other) const;
     const VecFloat operator/(const VecFloat &other) const;
 
+    VecFloat& operator+=(const VecFloat& other);
+
     explicit operator VecInt() const;
     explicit operator VecSize() const;
+
+    float length2() const;
+    float length() const;
+    float distance(const VecFloat& other) const;
 
     bool lexicographic_order_exact(const VecFloat& other) const;
     // This is a valid compare function for sorting (and the translation rule for equiv expression holds true)

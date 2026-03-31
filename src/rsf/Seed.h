@@ -123,11 +123,11 @@ namespace ridgesurface
         Lattice lattice;
     };
 
-    class SeedIterator;
+    class SeedVoxelSourcesIterator;
 
     class Seed
     {
-        friend SeedIterator;
+        friend SeedVoxelSourcesIterator;
         friend std::hash<Seed>;
 
     protected:
@@ -228,7 +228,7 @@ namespace ridgesurface
             return Seed(SeedLine(points), distance);
         }
 
-        SeedIterator getVoxelSources(Lattice lattice);
+        SeedVoxelSourcesIterator getVoxelSources(Lattice lattice);
 
         float
         getDistance() const
@@ -292,7 +292,7 @@ namespace ridgesurface
         }
     };
 
-    class SeedIterator
+    class SeedVoxelSourcesIterator
     {
     protected:
         SeedEnum id;
@@ -320,7 +320,7 @@ namespace ridgesurface
         }
 
     public:
-        SeedIterator(Seed seed, Lattice lattice)
+        SeedVoxelSourcesIterator(Seed seed, Lattice lattice)
             : id(seed.id)
         {
             switch (id)
@@ -352,7 +352,7 @@ namespace ridgesurface
 
         using value_type = std::size_t;
 
-        ADD_RANGE_TO_RUST_ITERATOR(SeedIterator)
+        ADD_RANGE_TO_RUST_ITERATOR(SeedVoxelSourcesIterator)
     };
 }
 

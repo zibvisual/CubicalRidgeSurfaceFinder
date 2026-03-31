@@ -1,0 +1,3 @@
+# instead of bbox, we use origin and voxelsize
+origin = 12.3
+voxelsize = 0.1

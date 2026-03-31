@@ -26,7 +26,7 @@ set(CMAKE_STATIC_LIBRARY_PREFIX "")
 set(CMAKE_SHARED_LIBRARY_PREFIX "")
 
 # create own library
-set(SOURCES src/utils/Vec.cpp src/rsf/CubicalRidgeSurfaceFinder.cpp src/rsf/Seed.cpp src/io/npy.cpp)
+set(SOURCES src/utils/Vec.cpp src/rsf/CubicalRidgeSurfaceFinder.cpp src/rsf/Seed.cpp src/io/common.cpp)
 add_library(rsflib STATIC ${SOURCES})
 target_include_directories(rsflib PUBLIC src)
 target_link_libraries(rsflib PUBLIC fmt::fmt-header-only)

@@ -10,10 +10,16 @@ struct PatchAddition {
     std::size_t point_end;
     std::size_t triangle_start;
     std::size_t triangle_end;
+
+    bool empty() const {
+        return point_start == point_end;
+    }
 };
 
 /**
  * Represents the information necessary to update a patched surfaces.
+ * 
+ * Invariant: The indices of the triangles are relative to the patch start!
  */
 struct SurfaceUpdate {
     std::vector<PatchAddition> m_additions;
@@ -21,6 +27,22 @@ struct SurfaceUpdate {
     std::vector<uint64_t> m_removals;
     std::vector<VecFloat> m_points;
     std::vector<SimpleTriangle> m_triangles;
+
+    // SurfaceUpdate() : m_additions(), m_orientation_flips(), m_removals(), m_points(), m_triangles(){}
+
+    void save_each_patch(std::filesystem::path path, bool save_empty_patches = false) const {
+        for(const auto& patch : m_additions){
+            if(!save_empty_patches && patch.empty()){
+                continue;
+            }
+            auto output = add_suffix(path, "_patch_" + std::to_string(patch.patch_id));
+
+            // iterarate and create spans
+            auto points = std::span(m_points.cbegin() + patch.point_start, m_points.cbegin() + patch.point_end);
+            auto triangles = std::span(m_triangles.cbegin() + patch.triangle_start, m_triangles.cbegin() + patch.triangle_end);
+            write_wavefront(output, points, triangles);
+        }
+    }
 };
 
 class SurfaceUpdateBuilder {
@@ -33,9 +55,9 @@ public:
     }
     std::size_t addPoint(VecFloat point)
     {
-        auto size = m_points.size();
+        auto relative_offset = m_points.size() - m_first_point;
         m_points.push_back(point);
-        return size;
+        return relative_offset;
     }
     void addTriangle(std::size_t first, std::size_t second, std::size_t third)
     {

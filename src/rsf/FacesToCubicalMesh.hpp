@@ -24,7 +24,7 @@ public:
             return;
         // clear voxel to mesh point, as each patch should have its own points
         m_voxelToMeshPoint.clear();
-        uint64_t pointCounter = surface->points().size();
+        uint64_t pointCounter = 0;
         std::size_t point_start = surface->points().size();
         std::size_t triangle_start = surface->triangles().size();
 

@@ -46,7 +46,7 @@ const char* ExamplesString[] = {
 
 int main(int argc, char *argv[])
 {
-    argparse::ArgumentParser program("Ridge Surface Finder Examples", RidgeSurfaceFinder_VERSION_MAJOR + "." + RidgeSurfaceFinder_VERSION_MINOR);
+    argparse::ArgumentParser program("Ridge Surface Finder Examples", std::to_string(RidgeSurfaceFinder_VERSION_MAJOR) + "." + std::to_string(RidgeSurfaceFinder_VERSION_MINOR));
     program.add_argument("example").help("Example to generate.").choices(ExamplesString[0], ExamplesString[1]);
     // program.add_argument("--min").default_value(0.f).scan<'g', float>().help("Min threshold. Everything under is not touched.");
     // program.add_argument("--max").default_value(1.2f).scan<'g', float>().help("Max threshold. Everything above or equal has no cost.");

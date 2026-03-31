@@ -124,6 +124,16 @@ public:
         return m_min_center.equals(rhs.m_min_center, epsilon) && m_max_center.equals(rhs.m_max_center, epsilon);
     }
 
+    float distance(VecFloat pos) const {
+        auto origin_distance = (pos - m_min_center).min();
+        auto corner_distance = (m_max_center - pos).min();
+        return std::min(origin_distance, corner_distance);
+    }
+
+    float min() const {
+        return (m_max_center - m_min_center).min();
+    }
+
 private:
     VecFloat m_min_center;
     VecFloat m_max_center;

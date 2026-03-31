@@ -7,6 +7,7 @@
 class Dims
 {
 public:
+    Dims() : m_x(0), m_y(0), m_z(0) {}
     Dims(std::size_t x) : m_x(x), m_y(x), m_z(x) {}
     Dims(std::size_t x, std::size_t y, std::size_t z) : m_x(x), m_y(y), m_z(z) {}
 
@@ -28,6 +29,11 @@ public:
     bool contains(VecInt loc) const
     {
         return contains(loc.x(), loc.y(), loc.z());
+    }
+
+    bool empty() const
+    {
+        return m_x == 0 && m_y == 0 && m_z == 0;
     }
 
     std::size_t x() const

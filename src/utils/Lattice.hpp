@@ -12,6 +12,7 @@ public:
     Lattice() : m_dims(Dims(0,0,0)), m_origin(VecFloat(0.f,0.f,0.f)), m_voxelsize(VecFloat(1.f, 1.f, 1.f)){}
     Lattice(Dims dims) : m_dims(dims), m_origin(VecFloat(0.f,0.f,0.f)), m_voxelsize(VecFloat(1.f,1.f,1.f)){}
     Lattice(Dims dims, VecFloat origin, VecFloat voxelsize) : m_dims(dims), m_origin(origin), m_voxelsize(voxelsize){}
+    Lattice(Dims dims, CenterBBox bbox) : m_dims(dims), m_origin(bbox.origin(dims)), m_voxelsize(bbox.voxelsize(dims)){}
     Lattice(Dims dims, CornerBBox bbox) : m_dims(dims), m_origin(bbox.origin(dims)), m_voxelsize(bbox.voxelsize(dims)){}
 
     Dims dims() const {
@@ -36,6 +37,15 @@ public:
 
     VecFloat origin() const {
         return m_origin;
+    }
+
+    /**
+     * The opposite end of the measured signal regarding origin().
+     * 
+     * origin() and corner() return the same positions as centerbox().
+     */
+    VecFloat corner() const {
+        return m_origin + (static_cast<VecFloat>(m_dims) - 1.0f) * m_voxelsize; 
     }
 
     void setOrigin(VecFloat orig) {
@@ -75,6 +85,13 @@ public:
     VecSize gridLocation(VecFloat worldPosition) const {
         // 0.5f and floor act as round()
         return static_cast<VecSize>((gridPosition(worldPosition) + 0.5f).floor().max(0.0)).clamp(m_dims);
+    }
+
+    /**
+     * The image border is considered to be directly at the min and max signal (centerbox).
+     */
+    float distanceToImageBorder(VecFloat worldPosition) const {
+        return centerbox().distance(worldPosition);
     }
 
     // These are temporary functions and should be chaned later on. Instead of std::size_t, FieldLocations should be created.

@@ -36,18 +36,23 @@ using Catch::Matchers::UnorderedEquals;
 #endif
 #define __DATAPATH__ std::string(__DATAPATH_RAW__)
 
-TEST_CASE("Load Files", "[npy][txt][io]")
+TEST_CASE("Common IO operations", "[io]")
+{
+    // pass for now
+}
+
+TEST_CASE("Load Numpy Files", "[npy][txt][io]")
 {
     // check if type is correct
-    // auto stype = npy::probe_npy_scalartype(__DATAPATH__+"/volumes/grayimage_234");
+    // auto stype = npy::probe_npy_scalartype(__DATAPATH__+"/volumes/npy/grayimage_234");
     // std::cout << stype << std::endl;
 
     // load image
-    auto img = RawField<float>::load(__DATAPATH__+"/volumes/grayimage_234");
+    auto img = RawField<float>::load(__DATAPATH__+"/volumes/npy/grayimage_234.npy");
     REQUIRE(img.dims() == Dims(4, 3, 2));
 
     // check if fortran order works correctly
-    auto fortran = RawField<float>::load(__DATAPATH__+"/volumes/grayimage_234_fortran");
+    auto fortran = RawField<float>::load(__DATAPATH__+"/volumes/npy/grayimage_234_fortran.npy");
     REQUIRE(fortran.dims() == Dims(4, 3, 2));
 
     std::size_t counter = 0;
@@ -64,27 +69,49 @@ TEST_CASE("Load Files", "[npy][txt][io]")
     }
 
     // metadata
-    REQUIRE(img.getCornerBoundingBox().equals(CornerBBox(VecFloat(0), VecFloat(4,3,2))));
     REQUIRE(img.getVoxelSize() == VecFloat(1.0));
+    REQUIRE(img.lattice().origin() == VecFloat(0.5));
     REQUIRE(img.getCenterBoundingBox().min_center() == VecFloat(0.5));
+    REQUIRE(img.getCenterBoundingBox().max_center() == VecFloat(3.5,2.5,1.5));
+    REQUIRE(img.getCornerBoundingBox().equals(CornerBBox(VecFloat(0), VecFloat(4,3,2))));
 
     REQUIRE(fortran.getCenterBoundingBox().equals(CenterBBox(VecFloat(12.3), VecFloat(12.6,12.5,12.4))));
     REQUIRE(fortran.getVoxelSize() == VecFloat(0.1));
     REQUIRE(fortran.getCornerBoundingBox().min_corner() == VecFloat(12.25));
 }
 
+TEST_CASE("Load Nrrd Files", "[nrrd][io]")
+{
+    // load image
+    auto img = RawField<float>::load(__DATAPATH__+"/volumes/nrrd/membrane_float.nrrd");
+    REQUIRE(img.dims() == Dims(325, 200, 81));
+    REQUIRE(img.getVoxelSize().equals(VecFloat(7.84f)));
+    REQUIRE(img.getCenterBoundingBox().equals(CenterBBox(VecFloat(3912.16f,235.2f,0.0f), VecFloat(3912.16f + 2540.16f,235.2f + 1560.16f,627.2f))));
+    REQUIRE(img.getCornerBoundingBox().equals(CornerBBox(VecFloat(3908.24f,231.28f,-3.92f), VecFloat(6456.24f, 1799.28f, 631.12f))));
+
+    // check data at specific points
+    const auto& lattice = img.lattice();
+    auto val = img.get(lattice.gridLocation(VecFloat(5520.315f, 777.600f, 313.600f)));
+    REQUIRE(val.has_value());
+    REQUIRE_THAT(val.value(), WithinULP(38.806f, 10));
+
+    val = img.get(lattice.gridLocation(VecFloat(4948.516f, 1045.377f, 313.600f)));
+    REQUIRE(val.has_value());
+    REQUIRE_THAT(val.value(), WithinULP(38.806f, 10));
+}
+
 TEST_CASE("Fast Marching Utilities", "[fm]")
 {
     // load image
-    auto img = RawField<float>::load(__DATAPATH__+"/volumes/grayimage01_333");
+    auto img = RawField<float>::load(__DATAPATH__+"/volumes/npy/grayimage01_333.npy");
     // calculate fm gradient for location 1,1,1
     auto grad = fastmarching::gradient(img, img.createLocation(VecSize(1, 1, 1)));
     // TODO: this should maybe be negative instead of positive...
     REQUIRE(grad.equals(VecFloat(0.70147467, 0.13889703, 0.76361562)));
 
-    auto singular1 = RawField<float>::load(__DATAPATH__+"/volumes/singularx1");
-    auto singular2 = RawField<float>::load(__DATAPATH__+"/volumes/singularx2");
-    auto singular3 = RawField<float>::load(__DATAPATH__+"/volumes/singularx3");
+    auto singular1 = RawField<float>::load(__DATAPATH__+"/volumes/npy/singularx1.npy");
+    auto singular2 = RawField<float>::load(__DATAPATH__+"/volumes/npy/singularx2.npy");
+    auto singular3 = RawField<float>::load(__DATAPATH__+"/volumes/npy/singularx3.npy");
 
     std::size_t counter = 0;
     for (std::size_t z = 0; z < singular1.dims().z(); ++z)
@@ -100,10 +127,10 @@ TEST_CASE("Fast Marching Utilities", "[fm]")
         }
     }
 
-    auto pot = RawField<float>::load(__DATAPATH__+"/volumes/grayimage01_333");
-    auto vals = RawField<float>::load(__DATAPATH__+"/volumes/grayimage02_333");
-    auto eikonal = RawField<float>::load(__DATAPATH__+"/volumes/eikonal_01x02");
-    auto euclidean = RawField<float>::load(__DATAPATH__+"/volumes/euclidean02");
+    auto pot = RawField<float>::load(__DATAPATH__+"/volumes/npy/grayimage01_333.npy");
+    auto vals = RawField<float>::load(__DATAPATH__+"/volumes/npy/grayimage02_333.npy");
+    auto eikonal = RawField<float>::load(__DATAPATH__+"/volumes/npy/eikonal_01x02.npy");
+    auto euclidean = RawField<float>::load(__DATAPATH__+"/volumes/npy/euclidean02.npy");
 
     // check if eikonal and euclidean are the same as in amira
     counter = 0;
@@ -127,9 +154,9 @@ TEST_CASE("Fast Marching", "[fm]")
 
     SECTION("Probobilistic field"){
         // load images
-        auto pot = RawField<float>::load(__DATAPATH__+"/volumes/10x10x10");
-        auto time = RawField<float>::load(__DATAPATH__+"/volumes/10x10x10_time");
-        auto dist = RawField<float>::load(__DATAPATH__+"/volumes/10x10x10_dist");
+        auto pot = RawField<float>::load(__DATAPATH__+"/volumes/npy/10x10x10.npy");
+        auto time = RawField<float>::load(__DATAPATH__+"/volumes/npy/10x10x10_time.npy");
+        auto dist = RawField<float>::load(__DATAPATH__+"/volumes/npy/10x10x10_dist.npy");
         // create fm with two RawFields, and use ArrayMappingView (pointer) for now...
         auto time_view = mutil::ArrayMappingView<uint64_t,float>(time.data(), time.getDims().size());
         auto dist_view = mutil::ArrayMappingView<uint64_t,float>(dist.data(), dist.getDims().size());
@@ -156,7 +183,7 @@ TEST_CASE("Fast Marching", "[fm]")
     }
 
     SECTION("Simple Ridge Field"){
-        auto pot = RawField<float>::load(__DATAPATH__+"/surfaces/simple_ridge");
+        auto pot = RawField<float>::load(__DATAPATH__+"/surfaces/simple_ridge.npy");
         // using MappingView = mutil::HashMapMappingView<SmallHashMap<int64_t, float>>;
         // fastmarching::FastMarching<fastmarching::ObserverDistance<MappingView>> m_fm;
         fastmarching::FastMarching<fastmarching::ObserverDistance<mutil::HashMapMappingView<SmallHashMap<int64_t, float>>>> fm(progress);
@@ -168,11 +195,11 @@ TEST_CASE("Fast Marching", "[fm]")
         // debug: save
         auto dist = RawField<float>(pot.dims());
         fm.distance(dist.data(), dist.dims().size(), false);
-        dist.save("data/output/simple_ridge_dist_test");
+        dist.save(__DATAPATH__+"/output/simple_ridge_dist_test");
         
         // compare with amira result
-        auto time_ref = RawField<float>::load(__DATAPATH__+"/surfaces/simple_ridge_time_p05-p15_nocap");
-        auto dist_ref = RawField<float>::load(__DATAPATH__+"/surfaces/simple_ridge_dist_p05-p15_nocap");
+        auto time_ref = RawField<float>::load(__DATAPATH__+"/surfaces/simple_ridge_time_p05-p15_nocap.npy");
+        auto dist_ref = RawField<float>::load(__DATAPATH__+"/surfaces/simple_ridge_dist_p05-p15_nocap.npy");
         auto counter = 0;
         for (std::size_t z = 0; z < pot.dims().z(); ++z)
         {
@@ -192,7 +219,7 @@ TEST_CASE("Fast Marching", "[fm]")
 TEST_CASE("Wavefront Files", "[obj][io]")
 {
     SECTION("cube example"){
-        auto data = read_wavefront("data/surfaces/unit_cube");
+        auto data = read_wavefront(__DATAPATH__+"/surfaces/unit_cube.obj");
         std::vector<VecFloat> points = {
             VecFloat(0.f,0.f,0.f),
             VecFloat(0.f,0.f,1.f),
@@ -205,13 +232,13 @@ TEST_CASE("Wavefront Files", "[obj][io]")
         };
         REQUIRE_THAT(data.points, UnorderedEquals(points));
 
-        auto cube = surface::Surface::load(__DATAPATH__+"/surfaces/unit_cube");
+        auto cube = surface::Surface::load(__DATAPATH__+"/surfaces/unit_cube.obj");
         REQUIRE(cube.number_of_points() == 8);
         REQUIRE(cube.number_of_trianlges() == 12);
     }
 
     SECTION("house example"){
-        auto data = read_wavefront("data/surfaces/house");
+        auto data = read_wavefront(__DATAPATH__+"/surfaces/house.obj");
         std::vector<VecFloat> points = {
             VecFloat(1.f,0.f,1.f),
             VecFloat(-1.f,0.f,1.f),
@@ -247,7 +274,7 @@ TEST_CASE("Wavefront Files", "[obj][io]")
         };
         REQUIRE_THAT(data.triangles, UnorderedEquals(triangles));
     
-        auto surf = surface::Surface::load(__DATAPATH__+"/surfaces/house");
+        auto surf = surface::Surface::load(__DATAPATH__+"/surfaces/house.obj");
         REQUIRE(surf.number_of_points() == 10);
         REQUIRE(surf.number_of_trianlges() == 18);
     }
@@ -319,7 +346,7 @@ TEST_CASE("Face to Surface", "[face]")
     // origin is the center of the first voxel, which is 0.5f
     builder.populateSurface(&surf, Lattice(Dims(1,1,1), VecFloat(0.5f), VecFloat(1.0f)), &faces[0], &faces[6]);
     
-    auto ref = surface::Surface::load(__DATAPATH__+"/surfaces/unit_cube");
+    auto ref = surface::Surface::load(__DATAPATH__+"/surfaces/unit_cube.obj");
     REQUIRE(surf.number_of_points() == 8);
     REQUIRE(surf.number_of_trianlges() == 12);
     REQUIRE(surf.number_of_patches() == 1);
@@ -337,7 +364,7 @@ TEST_CASE("Union Find", "[seed]")
 
 TEST_CASE("Seedpoint Sampler", "[seed]")
 {
-    auto img = RawField<float>::load(__DATAPATH__+"/volumes/grayimage01_333");
+    auto img = RawField<float>::load(__DATAPATH__+"/volumes/npy/grayimage01_333.npy");
 
     auto seeds = sample(img.data(), img.dims(), 0.5f);
     std::vector<uint32_t> expected = {25};
@@ -437,23 +464,29 @@ TEST_CASE("Ridge Surface Finder", "[rsf]")
     ridgesurface::CubicalRidgeSurfaceFinder m_finder(progressbar);
 
     SECTION("plane surface"){
-        auto img = RawField<float>::load(__DATAPATH__+"/surfaces/simple_ridge");
+        auto img = RawField<float>::load(__DATAPATH__+"/surfaces/simple_ridge.npy");
         REQUIRE(img.dims() == Dims(10));
         REQUIRE(img.getCornerBoundingBox() == CornerBBox::fromCenterBBox(VecFloat(0.f), VecFloat(9.f), img.dims()));
 
         m_finder.setInput(&img.get_view());
         m_finder.addSeed(ridgesurface::Seed::Seedpoint(VecFloat(5.f), 50.0f));
         m_finder.setThresholds(0.5f,1.5f);
-        m_finder.calculate();
+        auto patch_update = m_finder.calculate();
+        REQUIRE(patch_update.m_additions.size() == 1);
+        REQUIRE(patch_update.m_points.size() > 0);
+        REQUIRE(patch_update.m_triangles.size() > 0);
         
         auto labels = RawField<uint16_t>(img.dims());
         m_finder.castToLabels(labels.data());
-        labels.save("data/output/simple_ridge_labels");
+        labels.save(__DATAPATH__+"/output/simple_ridge_labels.npy");
 
         // m_finder.patchedSurface().save("data/output/simple_ridge_test");
-        const auto ref = surface::StaticSurface::load(__DATAPATH__+"/surfaces/simple_ridge_p05-p15");
+        const auto ref = surface::StaticSurface::load(__DATAPATH__+"/surfaces/simple_ridge_p05-p15.obj");
         auto res = surface::StaticSurface();
         m_finder.finalize(&res);
+        // res.save(__DATAPATH__+"/output/simple_ridge_p05-p15");
+        REQUIRE(res.number_of_points() > 0);
+        REQUIRE(res.number_of_trianlges() > 0);
         REQUIRE(res.equals(ref));
     }
 }

@@ -1,9 +1,9 @@
 #include "Seed.h"
 
 namespace ridgesurface {
-    SeedIterator
+    SeedVoxelSourcesIterator
     Seed::getVoxelSources(Lattice lattice)
     {
-        return SeedIterator(*this, lattice);
+        return SeedVoxelSourcesIterator(*this, lattice);
     }
 }

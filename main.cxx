@@ -28,11 +28,24 @@
 // TODO: make seed input optional, and use automatic seeds and seed sampler if no seed input was set!
 // TODO: then we need some seed threshold and maybe other parameters
 
+namespace {
+    std::optional<std::string> flatten_arg(const argparse::ArgumentParser& program, std::string name, std::string implicit){
+        if(!program.is_used(name)){
+            return {};
+        }
+        auto arg = program.get<std::vector<std::string>>(name);
+        if(arg.empty()){
+            return implicit;
+        }
+        return arg.front();
+    }
+}
+
 int main(int argc, char *argv[])
 {
-    argparse::ArgumentParser program("Ridge Surface Finder", RidgeSurfaceFinder_VERSION_MAJOR + "." + RidgeSurfaceFinder_VERSION_MINOR);
+    argparse::ArgumentParser program("Ridge Surface Finder", std::to_string(RidgeSurfaceFinder_VERSION_MAJOR) + "." + std::to_string(RidgeSurfaceFinder_VERSION_MINOR));
     program.add_argument("input").help("Numpy input file to load");
-    program.add_argument("-s", "--seed").required().help("Numpy label for voxel seed or wavefront object");
+    program.add_argument("-s", "--seed").default_value("0.01").help("Numpy label, wavefront object or float");
     program.add_argument("--min").default_value(0.f).scan<'g', float>().help("Min threshold. Everything under is not touched.");
     program.add_argument("--max").default_value(1.2f).scan<'g', float>().help("Max threshold. Everything above or equal has no cost.");
     program.add_argument("--range").default_value(50.0f).scan<'g', float>().help("How far each seedpoint should be marched for");
@@ -41,8 +54,8 @@ int main(int argc, char *argv[])
     program.add_argument("--voxelsize").nargs(1,3).scan<'g', float>().default_value(std::vector<float>{1.f}).help("The uniform voxel size");
     program.add_argument("--origin").nargs(1,3).scan<'g', float>().default_value(std::vector<float>{0.f}).help("position of the image");
     program.add_argument("-o", "--output").help("Name of output file");
-    program.add_argument("-d", "--debug").implicit_value("debug");
-    program.add_argument("-a", "--automatic").nargs(1,2).implicit_value(0.6).help("Add further seedpoints until threshold is not reached or the reached max seed points");
+    program.add_argument("-d", "--debug").nargs(0,1).help("Save debug information in given path");
+    program.add_argument("-a", "--automatic").nargs(1,2).help("Adds more seed points: (min-distance-between-points, [max seedpoints])");
 
     try
     {
@@ -55,7 +68,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    // load input
+    // load input (TODO: use SpatialInformation Struct)
     RawField<float> img;
     try
     {
@@ -134,6 +147,8 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    std::cout << "loading seeds..." << std::endl;
+
     // load seeds (either labels or wavefront-like vertexset)
     std::vector<ridgesurface::Seed> seeds;
     try {
@@ -143,6 +158,7 @@ int main(int argc, char *argv[])
             auto point = vertexset.points[i];
             seeds.push_back(ridgesurface::Seed(ridgesurface::SeedPoint(VecFloat(point.x(), point.y(), point.z())), vertexset.data[i]));
         }
+        std::cout << "Loaded " << seeds.size() << " seeds from vertexset " << program.get("--seed") << std::endl;
     }
     catch (const std::exception &err) {
         // try labels
@@ -154,6 +170,7 @@ int main(int argc, char *argv[])
                     seeds.push_back(ridgesurface::Seed(ridgesurface::SeedPoint(static_cast<VecFloat>(Lattice::gridLocationFromCIndex(i, labels.dims()))), program.get<float>("--range")));
                 }
             }
+            std::cout << "Loaded " << seeds.size() << " seeds from label field " << program.get("--seed") << std::endl;
         }
         catch (const std::exception &err) {
             // try integer conversion
@@ -167,6 +184,7 @@ int main(int argc, char *argv[])
                     VecFloat worldPos = img.lattice().worldPosition(gridLoc);
                     seeds.push_back(ridgesurface::Seed(ridgesurface::SeedPoint(VecFloat(worldPos.x(), worldPos.y(), worldPos.z())), program.get<float>("--range")));   
                 }
+                std::cout << "Generated " << seeds.size() << " seeds" << std::endl;
             }catch (const std::exception &err) {
                 std::cerr << "Neither paths to wavefront object or numpy labels found nor conversion to float possible." << std::endl;
                 return 1;
@@ -194,6 +212,12 @@ int main(int argc, char *argv[])
     // run
     try
     {
+        std::filesystem::path input_name = program.get("input");
+        auto debug_setting = flatten_arg(program, "-d", "debug");
+        bool debug = debug_setting.has_value();
+        std::filesystem::path debug_path = debug_setting.value_or("debug");
+        auto patched_surface = surface::Surface();
+
         // warn if voxelsize are wideley different
         const auto voxelsize = img.getVoxelSize();
         const float max_voxelsize = std::max(std::max(voxelsize.x(), voxelsize.y()), voxelsize.z());
@@ -205,7 +229,6 @@ int main(int argc, char *argv[])
         const auto min = program.get<float>("--min");
         const auto max = program.get<float>("--max");
 
-        std::cout << "Loaded " << seeds.size() << " seeds" << std::endl;
         std::cout << "Cost intensity range for marching set to [" << min << ", " << max << "]" << std::endl;
 
         auto progressbar = progressbar::Progressbar(progressbar::ProgressbarReportLevel::FullReport);
@@ -213,27 +236,38 @@ int main(int argc, char *argv[])
         m_finder.setInput(&img.get_view());
         m_finder.newSeeds(seeds);
         m_finder.setThresholds(min,max);
-        m_finder.recalculate();
+        if(debug){
+            m_finder.save_debug_information(debug_path / "seed_sample" / input_name.stem().concat("_rsf_"));
+            patched_surface.update(m_finder.recalculate());
+        }else{
+            m_finder.recalculate();
+        }
 
         if(automatic_threshold){
+            // TODO support automatic progressbar (we do not know when we finish)
+            progressbar.level(progressbar::ProgressbarReportLevel::FullReport);
             auto max = automatic_max_seedpoints.value_or(std::numeric_limits<uint64_t>::max());
             while(m_finder.numOfSeeds() < max){
                 auto shift_distance = program.get<float>("--range") * 0.05;
                 auto candidate = m_finder.getSeedpointCandidate(automatic_threshold.value(), shift_distance);
                 if(!candidate.has_value()){
+                    std::cout << "No more candidates found!" << std::endl;
                     break;
                 }
                 // seedpoint creation
                 ridgesurface::SeedPoint sp(candidate.value());
                 ridgesurface::Seed seed(sp, program.get<float>("--range"));
-                return m_finder.addSeed(seed);
-                m_finder.calculate();
+                m_finder.addSeed(seed);
+                if(debug){
+                    patched_surface.update(m_finder.calculate());
+                }else{
+                    m_finder.calculate();
+                }
             }
         }
         
         auto surf = surface::StaticSurface();
         m_finder.finalize(&surf);
-        std::filesystem::path input_name = program.get("input");
         std::filesystem::path default_output_name = input_name;
         default_output_name = default_output_name.replace_filename(input_name.stem().concat("_rsf")).replace_extension("obj");
         const auto output_name = program.present("-o").value_or(default_output_name);
@@ -241,13 +275,9 @@ int main(int argc, char *argv[])
         std::cout << "Saved result in " << output_name << std::endl;
 
         // debug
-        if(auto debug_option = program.present("-d")){
-            auto seedpoint_graph = m_finder.generateSeedpointGraph();
-            seedpoint_graph.save_as_tgf(*debug_option / input_name.stem().concat("_rsf_seedpoint_graph"));
-            seedpoint_graph.save_as_lineset(*debug_option / input_name.stem().concat("_rsf_seedpoint_graph"));
-
-            auto poles = m_finder.generatePoles();
-            poles.save(*debug_option / input_name.stem().concat("_rsf_poles"));
+        if(debug){
+            m_finder.save_debug_information(debug_path / input_name.stem().concat("_rsf_"));
+            patched_surface.save_each_patch(debug_path / input_name.stem());
         }
     }
     catch (const std::exception &e)

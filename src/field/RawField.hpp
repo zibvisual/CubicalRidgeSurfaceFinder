@@ -9,11 +9,13 @@
 #include <utils/BBox.hpp>
 #include <utils/Lattice.hpp>
 #include <utils/Vec.hpp>
+#include <utils/Direction.hpp>
+#include <field/RawFieldView.hpp>
+
 #include <io/npy.hpp>
 #include <io/metadata.hpp>
-#include <utils/Direction.hpp>
 #include <io/spatialinfo.hpp>
-#include <field/RawFieldView.hpp>
+#include <io/nrrd.hpp>
 
 /**
  * Fields are just values in some 3D space. If no value exist at a spot, we return None or some default value.
@@ -84,6 +86,29 @@ public:
     }
 
     static RawField load(std::filesystem::path input){
+        // check extension
+        if(!input.has_extension()){
+            throw std::invalid_argument("File extension necessary");
+        }
+        auto extension = input.extension();
+        if(extension == ".nrrd"){
+            return load_nrrd(input);
+        }else if (extension == ".npy"){
+            return load_npy(input);
+        }
+        throw std::invalid_argument("Extension not supported");
+    }
+
+    static RawField load_nrrd(std::filesystem::path input){
+        auto stream = path_to_ifstream(input, "nrrd");
+        auto data = nrrd::read_nrrd<T>(stream);
+        if(!data){
+            throw std::invalid_argument("Not a valid/supported nrrd file");
+        }
+        return RawField(data->data, data->lattice);
+    }
+
+    static RawField load_npy(std::filesystem::path input){
         npy::npy_data<T> data = npy::read_npy<T>(input);
         if (data.shape.ndims() != 3)
         {

@@ -25,6 +25,7 @@
 #include "Faces.hpp"
 #include "FacesToCubicalMesh.hpp"
 #include <utils/Range.hpp>
+#include <rsf/SeedIterator.hpp>
 
 
 namespace futil
@@ -49,6 +50,8 @@ namespace ridgesurface
         ~CubicalRidgeSurfaceFinder(void);
 
         void setInput(const RawFieldView<float>* probability);
+        const RawFieldView<float>* data() const;
+
         void setThresholds(float min, float max);
         float getMin();
         float getMax();
@@ -65,6 +68,9 @@ namespace ridgesurface
         // Get seeds. Use const function if possible.
         const Seed& getSeed(std::size_t i) const;
         Seed& getSeed(std::size_t i);
+
+        SeedInSurfaceIterator seedsInSurface() const;
+        SeedAdditionIterator seedsAddition() const;
 
         // Seed changes
         std::size_t numOfSeeds() const;
@@ -118,6 +124,8 @@ namespace ridgesurface
         SpatialGraph generateSeedpointGraph() const;
         LineSet<std::tuple<uint64_t, int8_t>> generatePoles() const;
 
+        void save_debug_information(std::string op) const;
+
 
         // void computeColoringOfSphere(std::size_t i, std::unordered_map<futil::Face, std::size_t>& map);
         // void computeIntegralCurves(std::size_t i, std::unordered_set<int64_t>& first, std::unordered_set<int64_t>& second);
@@ -154,7 +162,14 @@ namespace ridgesurface
         void finalize_neighborhood_graph();
 
         // calculations done by calculate
-        void updateInsert(uint64_t id);
+
+        /**
+         * Calculate and update the surface with a new patch, given the seed.
+         * 
+         * Returns false if update was not possible. Usually because the seed was bad.
+         * Caller should remove the given seed from m_seeds.
+         */
+        bool updateInsert(uint64_t id);
         /**
          * @brief After clearing all necessary patches, one must call removeObsoleteTriangles on the surface. (To also clear triangles)
          *
@@ -174,14 +189,17 @@ namespace ridgesurface
          */
         bool faceBetweenVoxels(std::size_t i, std::size_t j) const;
 
+        float calculateExcentricity(uint64_t seed) const;
+
         // progressbar
         progressbar::Progressbar& m_progressbar;
 
-        // Seeds
+        // List of seeds. Seed which will but are not yet deleted are stil in this list.
         std::unordered_map<uint64_t, Seed> m_seeds;
         uint64_t m_id_counter = 0;
-        // Edits of Seeds
+        // Edits of Seeds (addition, deletion)
         std::unordered_set<uint64_t> m_seeds_update;
+        // Stores all seed where we currently have a patch saved in a surface
         std::unordered_set<uint64_t> m_seeds_in_surface;
 
         // List of voxels changed by a seed
@@ -201,14 +219,15 @@ namespace ridgesurface
         std::unordered_set<int64_t>* ts_integralcurve1;
         std::unordered_set<int64_t>* ts_integralcurve2;
         
-        // optional memory saved for each patch
-        std::unordered_map<uint64_t, std::array<VecFloat, 2>> ts_poles;
+        // debug data
+        std::unordered_map<uint64_t, std::array<VecFloat, 2>> m_debug_poles;
+        std::unordered_map<uint64_t, float> m_debug_excentricity;
 
         // Fast Marching object
         using MappingView = mutil::HashMapMappingView<SmallHashMap<int64_t, float>>;
         fastmarching::FastMarching<fastmarching::ObserverDistance<MappingView>> m_fm;
 
-        // Inner labeling which can be transformed to create an unsigned char labeling for generate surface
+        // Inner labeling which can be transformed to create an unsigned char labeling for finalized surface generation
         RawField<std::size_t> m_cum_label;
 
         // Input and Outputs

@@ -1,5 +1,4 @@
 import ctypes
-import numpy as np
 
 # Structure for points
 class VecFloat(ctypes.Structure):
@@ -21,7 +20,7 @@ class Triangle(ctypes.Structure):
 class StaticSurface(ctypes.Structure):
     pass
 
-# Structure for surfaces
+# Structure for surfaces (has ownership of data)
 class Surface(ctypes.Structure):
     _fields_ = [
         ("points", ctypes.POINTER(VecFloat)), # Pointer to array of points
@@ -29,6 +28,15 @@ class Surface(ctypes.Structure):
         ("triangles", ctypes.POINTER(Triangle)), # Pointer to array of triangles
         ("num_triangles", ctypes.c_size_t),
         ("surf_ptr", ctypes.POINTER(StaticSurface))
+    ]
+
+# Surface Updates (after each recalculate, calculate) (view, no ownership of data)
+class SurfaceUpdate(ctypes.Structure):
+    _fields_ = [
+        ("points", ctypes.POINTER(VecFloat)), # Pointer to array of points
+        ("num_points", ctypes.c_size_t),
+        ("triangles", ctypes.POINTER(Triangle)), # Pointer to array of triangles
+        ("num_triangles", ctypes.c_size_t),
     ]
 
 # Incomplete class for handling `CubicalRidgeSurfaceFinder`
@@ -62,7 +70,7 @@ class CubicalRidgeSurfaceFinderAPI:
         """
         self.lib.free_surface.argtypes = [ctypes.POINTER(Surface)]
 
-        self.lib.CRSF_new.restype = CRSF_p 
+        self.lib.CRSF_new.restype = CRSF_p
 
         self.lib.CRSF_delete.argtypes = [CRSF_p]
 
@@ -92,6 +100,7 @@ class CubicalRidgeSurfaceFinderAPI:
         self.lib.CRSF_getMaxThreshold.restype = ctypes.c_float
 
         self.lib.CRSF_seedSampler.argtypes = [CRSF_p, ctypes.c_float, ctypes.c_float]
+        self.lib.CRSF_seedSampler.restype = ctypes.c_uint64
 
         self.lib.CRSF_addSeed.argtypes = [CRSF_p, ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float]
 
@@ -101,10 +110,15 @@ class CubicalRidgeSurfaceFinderAPI:
         self.lib.CRSF_clearSeedPoints.argtypes = [CRSF_p]
 
         self.lib.CRSF_recalculate.argtypes = [CRSF_p]
+        self.lib.CRSF_recalculate.restype = SurfaceUpdate
 
-        self.lib.CRSF_compute_finalize.argtypes = [CRSF_p]
-        self.lib.CRSF_compute_finalize.restype = ctypes.POINTER(Surface)
+        self.lib.CRSF_calculate.argtypes = [CRSF_p]
+        self.lib.CRSF_calculate.restype = SurfaceUpdate
 
+        self.lib.CRSF_finalize.argtypes = [CRSF_p]
+        self.lib.CRSF_finalize.restype = ctypes.POINTER(Surface)
+
+        self.lib.CRSF_write_surface_update.argtypes = [CRSF_p, ctypes.POINTER(ctypes.c_char)]
         self.lib.CRSF_save_debug_information.argtypes = [CRSF_p, ctypes.POINTER(ctypes.c_char)]
 
     def free_surface(self, surface_p):
@@ -280,7 +294,7 @@ class CubicalRidgeSurfaceFinderAPI:
         :raises RuntimeError: If generating seed points fails.
         """
         try:
-            self.lib.CRSF_seedSampler(crsf_p, threshold, distance)
+            return self.lib.CRSF_seedSampler(crsf_p, threshold, distance)
         except Exception as e:
             raise RuntimeError(f"Error generating or adding seed points: {e}")
 
@@ -292,11 +306,11 @@ class CubicalRidgeSurfaceFinderAPI:
         :raises RuntimeError: If the recalculation fails.
         """
         try:
-            self.lib.CRSF_recalculate(crsf_p)
+            return self.lib.CRSF_recalculate(crsf_p)
         except Exception as e:
             raise RuntimeError(f"Error recalculating ridge surface: {e}")
         
-    def compute(self, crsf_p):
+    def calculate(self, crsf_p):
         """
         Computes the surface using Fast Marching algorithm.
         
@@ -304,11 +318,11 @@ class CubicalRidgeSurfaceFinderAPI:
         :raises RuntimeError: If the computation fails.
         """
         try:
-            return self.lib.CRSF_compute(crsf_p)
+            return self.lib.CRSF_calculate(crsf_p)
         except Exception as e:
             raise RuntimeError(f"Error computing ridge surface: {e}")
 
-    def compute_finalize(self, crsf_p):
+    def finalize(self, crsf_p):
         """
         Computes the surface using Fast Marching algorithm and merges all the patches.
         
@@ -316,22 +330,34 @@ class CubicalRidgeSurfaceFinderAPI:
         :raises RuntimeError: If the computation fails.
         """
         try:
-            return self.lib.CRSF_compute_finalize(crsf_p)
+            return self.lib.CRSF_finalize(crsf_p)
         except Exception as e:
             raise RuntimeError(f"Error computing or merging surface: {e}")
         
-    def save_debug_information(self, csrf_p, debug_folder: str = "debug", filename: str = ""):
+    def write_surface_update(self, crsf_p, output_path: str = "debug/patches/rsf"):
+        """
+        Save patches of the current Surface Update.
+        
+        :param crsf_p: Pointer to the `CubicalRidgeSurfaceFinder` instance.
+        :param output_path: path where data should be saved to.
+        :raises RuntimeError: If the computation fails.
+        """
+        try:
+            b_output_path = output_path.encode('utf-8')
+            return self.lib.CRSF_write_surface_update(crsf_p, b_output_path)
+        except Exception as e:
+            raise RuntimeError(f"Error when saving debug information: {e}")
+        
+    def save_debug_information(self, crsf_p, output_path: str = "debug/rsf"):
         """
         Save debug information in the given folder.
         
         :param crsf_p: Pointer to the `CubicalRidgeSurfaceFinder` instance.
-        :param debug_folder: path to the folder the data should be saved to.
-        :param filename: filename is the prefix given to the files.
+        :param output_path: path where data should be saved to.
         :raises RuntimeError: If the computation fails.
         """
         try:
-            b_debug_folder = debug_folder.encode('utf-8')
-            b_filename = filename.encode('utf-8')
-            return self.lib.CRSF_save_debug_information(csrf_p, b_debug_folder, b_filename)
+            b_output_path = output_path.encode('utf-8')
+            return self.lib.CRSF_save_debug_information(crsf_p, b_output_path)
         except Exception as e:
             raise RuntimeError(f"Error when saving debug information: {e}")
