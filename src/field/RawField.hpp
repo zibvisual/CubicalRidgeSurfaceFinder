@@ -85,30 +85,31 @@ public:
         m_view.save(output_path);
     }
 
-    static RawField load(std::filesystem::path input){
+    static RawField load(std::filesystem::path input, SpatialArguments args = SpatialArguments())
+    {
         // check extension
         if(!input.has_extension()){
             throw std::invalid_argument("File extension necessary");
         }
         auto extension = input.extension();
         if(extension == ".nrrd"){
-            return load_nrrd(input);
+            return load_nrrd(input, args);
         }else if (extension == ".npy"){
-            return load_npy(input);
+            return load_npy(input, args);
         }
         throw std::invalid_argument("Extension not supported");
     }
 
-    static RawField load_nrrd(std::filesystem::path input){
+    static RawField load_nrrd(std::filesystem::path input, SpatialArguments args = SpatialArguments()){
         auto stream = path_to_ifstream(input, "nrrd");
-        auto data = nrrd::read_nrrd<T>(stream);
+        auto data = nrrd::read_nrrd<T>(stream, args);
         if(!data){
             throw std::invalid_argument("Not a valid/supported nrrd file");
         }
         return RawField(data->data, data->lattice);
     }
 
-    static RawField load_npy(std::filesystem::path input){
+    static RawField load_npy(std::filesystem::path input, SpatialArguments args = SpatialArguments()){
         npy::npy_data<T> data = npy::read_npy<T>(input);
         if (data.shape.ndims() != 3)
         {
@@ -120,7 +121,7 @@ public:
         try {
             metadata_t metadata = read_metadata(input, true);
             // std::cout << metadata << std::endl;
-            lattice = SpatialInformation::fromMetadata(metadata).toLattice(dims);
+            lattice = SpatialArguments::fromMetadata(metadata).update(args).toInformation().toLattice(dims);
         }
         catch (const std::ios_base::failure& e)
         {
@@ -335,6 +336,11 @@ public:
     const T* data() const
     {
         return m_data.data();
+    }
+
+    void setLattice(Lattice lattice)
+    {
+        m_view.setLattice(lattice);
     }
 
     void setBBox(CornerBBox bbox) {

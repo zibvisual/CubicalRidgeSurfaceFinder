@@ -33,7 +33,7 @@ inline bool is_nrrd_file(std::ifstream& inputFile)
 
 template <typename T>
 std::optional<nrrd_data<T>>
-read_nrrd(std::ifstream& inputFile)
+read_nrrd(std::ifstream& inputFile, SpatialArguments command_args = SpatialArguments())
 {
     if(!is_nrrd_file(inputFile)){
         return {};
@@ -176,25 +176,19 @@ read_nrrd(std::ifstream& inputFile)
         return {};
     }
 
-    // set bbox
-    Lattice lattice;
+    // create spatial args
+    SpatialArguments args = SpatialArguments();
     if (spaceMins && spaceMaxs)
     {
-        // we assume cornerbox usually
-        if(centered.value_or(false)){
-            lattice = Lattice(sizes, CenterBBox(spaceMins.value(), spaceMaxs.value()));
-        }else{
-            lattice = Lattice(sizes, CornerBBox(spaceMins.value(), spaceMaxs.value()));
-        }
+        args.bbox = GenericBBox(spaceMins.value(), spaceMaxs.value());
     }
-    else if (spacings)
-    {
-        lattice = Lattice(sizes, VecFloat(), spacings.value());
-    }
-    else
-    {
-        lattice = Lattice(sizes);
-    }
+    args.origin = spaceMins;
+    args.voxelsize = spacings;
+    args.bbox_signal = centered;
+    args.origin_signal = centered;
+
+    // create lattice
+    Lattice lattice = args.update(command_args).toInformation().toLattice(sizes);
 
     auto size = sizes.size();
     auto data = std::vector<T>(size);

@@ -144,3 +144,34 @@ inline std::ostream& operator<<(std::ostream& os, const CenterBBox& bbox)
     os << "from " << bbox.min_center() << " to " << bbox.max_center();
     return os;
 }
+
+/**
+ * Generic BBox which can represent either CornerBBox or CenterBBox
+ */
+class GenericBBox 
+{
+public:
+    GenericBBox(VecFloat min, VecFloat max) : m_min(min), m_max(max){}
+
+    VecFloat min() const {
+        return m_min;
+    }
+
+    VecFloat max() const {
+        return m_max;
+    }
+
+    explicit operator CornerBBox() const
+    {
+        return CornerBBox(m_min, m_max);
+    }
+
+    explicit operator CenterBBox() const
+    {
+        return CenterBBox(m_min, m_max);
+    }
+
+private:
+    VecFloat m_min;
+    VecFloat m_max;
+};

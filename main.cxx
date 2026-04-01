@@ -50,9 +50,10 @@ int main(int argc, char *argv[])
     program.add_argument("--max").default_value(1.2f).scan<'g', float>().help("Max threshold. Everything above or equal has no cost.");
     program.add_argument("--range").default_value(50.0f).scan<'g', float>().help("How far each seedpoint should be marched for");
     program.add_argument("--corner").default_value(false).implicit_value(true).help("If the bounding box/origin is at the corner of the voxel instead of the center.");
+    program.add_argument("--center").default_value(false).implicit_value(true).help("If the bounding box/origin is at the center of the voxel instead of the corner.");
     program.add_argument("--bbox").nargs(2,6).scan<'g', float>().help("The bounding box of the image");
-    program.add_argument("--voxelsize").nargs(1,3).scan<'g', float>().default_value(std::vector<float>{1.f}).help("The uniform voxel size");
-    program.add_argument("--origin").nargs(1,3).scan<'g', float>().default_value(std::vector<float>{0.f}).help("position of the image");
+    program.add_argument("--voxelsize").nargs(1,3).scan<'g', float>().help("The uniform voxel size");
+    program.add_argument("--origin").nargs(1,3).scan<'g', float>().help("position of the image");
     program.add_argument("-o", "--output").help("Name of output file");
     program.add_argument("-d", "--debug").nargs(0,1).help("Save debug information in given path");
     program.add_argument("-a", "--automatic").nargs(1,2).help("Adds more seed points: (min-distance-between-points, [max seedpoints])");
@@ -68,78 +69,58 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    // load input (TODO: use SpatialInformation Struct)
+    // Arguments
+    auto args = SpatialArguments();
+    if(program.is_used("--bbox")){
+        std::vector<float> vals = program.get<std::vector<float>>("--bbox");
+        if(vals.size() == 2){
+            args.bbox = GenericBBox(VecFloat(vals[0]), VecFloat(vals[1]));
+        }else if(vals.size() == 6){
+            args.bbox = GenericBBox(VecFloat(vals[0], vals[1], vals[2]), VecFloat(vals[3],vals[4],vals[5]));
+        }else{
+            //ERROR: we need either 2 or 6 float values
+            std::cerr << "Either 2 or 6 float values are neccesary for a bounding box" << std::endl;
+            return 1;
+        }
+    }
+    if(program.is_used("--origin")){
+        std::vector<float> orig_vals = program.get<std::vector<float>>("--origin");
+        if(orig_vals.size() == 1){
+            args.origin = VecFloat(orig_vals[0]);
+        }else if(orig_vals.size() == 3){
+            args.origin = VecFloat(orig_vals[0], orig_vals[1], orig_vals[2]);
+        }else{
+            //ERROR: we need either 1 or 3 float values
+            std::cerr << "Either 1 or 3 float values are neccesary for origin" << std::endl;
+            return 1;
+        }
+    }
+    if(program.is_used("--voxelsize")){
+        std::vector<float> voxel_vals = program.get<std::vector<float>>("--voxelsize");
+        if(voxel_vals.size() == 1){
+            args.voxelsize = VecFloat(voxel_vals[0]);
+        }else if(voxel_vals.size() == 3){
+            args.voxelsize = VecFloat(voxel_vals[0], voxel_vals[1], voxel_vals[2]);
+        }else{
+            //ERROR: we need either 1 or 3 float values
+            std::cerr << "Either 1 or 3 float values are neccesary for voxelsize" << std::endl;
+            return 1;
+        }
+    }
+    if(program.get<bool>("--corner")){
+        args.bbox_signal = false;
+        args.origin_signal = false;
+    }
+    if(program.get<bool>("--center")){
+        args.bbox_signal = true;
+        args.origin_signal = true;
+    }
+
+    // load input
     RawField<float> img;
     try
     {
         img = RawField<float>::load(program.get("input"));
-        if(program.is_used("--bbox") && program.is_used("--voxelsize") 
-            || program.is_used("--bbox") && program.is_used("--origin"))
-        {
-            //ERROR: Either bbox or voxelsize (and origin)
-            std::cerr << "When a bounding box is given, no voxelsize or origin is allowed!" << std::endl;
-            return 1;
-        }
-
-        if(program.is_used("--corner") && !program.is_used("--bbox") 
-            || program.is_used("--corner") && !program.is_used("--origin"))
-        {
-            //INFO
-            std::cout << "--corner argument ignored, as no origin or bounding box was given" << std::endl;
-        }
-
-        // load bbox or origin/voxelsize
-        if(program.is_used("--bbox")){
-            std::vector<float> vals = program.get<std::vector<float>>("--bbox");
-            CornerBBox bbox = CornerBBox::fromCornerBbox(VecFloat(0.f), VecFloat(1.f));
-            if(vals.size() == 2){
-                if(program.get<bool>("--corner")){
-                    bbox = CornerBBox::fromCornerBbox(VecFloat(vals[0]), VecFloat(vals[1]));
-                }else{
-                    bbox = CornerBBox::fromCenterBBox(VecFloat(vals[0]), VecFloat(vals[1]), img.dims());
-                }
-            }else if(vals.size() == 6){
-                if(program.get<bool>("--corner")){
-                    bbox = CornerBBox::fromCornerBbox(VecFloat(vals[0], vals[1], vals[2]), VecFloat(vals[3],vals[4],vals[5]));
-                }else{
-                    bbox = CornerBBox::fromCenterBBox(VecFloat(vals[0], vals[1], vals[2]), VecFloat(vals[3],vals[4],vals[5]), img.dims());
-                }
-            }else{
-                //ERROR: we need either 2 or 6 float values
-                std::cerr << "Either 2 or 6 float values are neccesary for a bounding box" << std::endl;
-                return 1;
-            }
-            img.setBBox(bbox);
-        }else{
-            if(program.is_used("--origin")){
-                std::vector<float> orig_vals = program.get<std::vector<float>>("--origin");
-                VecFloat orig;
-                if(orig_vals.size() == 1){
-                    orig = VecFloat(orig_vals[0]);
-                }else if(orig_vals.size() == 3){
-                    orig = VecFloat(orig_vals[0], orig_vals[1], orig_vals[2]);
-                }else{
-                    //ERROR: we need either 1 or 3 float values
-                    std::cerr << "Either 1 or 3 float values are neccesary for origin" << std::endl;
-                    return 1;
-                }
-                img.setOrigin(orig);
-            }
-            if(program.is_used("--voxelsize")){
-                std::vector<float> voxel_vals = program.get<std::vector<float>>("--voxelsize");
-                VecFloat voxelsize;
-                if(voxel_vals.size() == 1){
-                    voxelsize = VecFloat(voxel_vals[0]);
-                }else if(voxel_vals.size() == 3){
-                    voxelsize = VecFloat(voxel_vals[0], voxel_vals[1], voxel_vals[2]);
-                }else{
-                    //ERROR: we need either 1 or 3 float values
-                    std::cerr << "Either 1 or 3 float values are neccesary for voxelsize" << std::endl;
-                    return 1;
-                }
-                img.setVoxelSize(voxelsize);
-            }
-        }
     }
     catch (const std::exception &e)
     {

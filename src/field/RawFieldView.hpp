@@ -457,6 +457,11 @@ public:
         return m_data;
     }
 
+    void setLattice(Lattice lattice)
+    {
+        m_lattice = lattice;
+    }
+
     void setBBox(CornerBBox bbox) {
         m_lattice.setBBox(bbox);
     }
