@@ -42,15 +42,18 @@ inline vertex_data<float> read_vertexset(std::istream& input, float defaults){
       if(token == "v"){
         if(!(line_stream >> x >> y >> z)){
             // ERROR: 3 float points are MANDATORY
+            continue;
         }
       }else{
         try{
             x = std::stof(token);
         } catch(const std::exception &err){
             // ERROR: neither v nor a float
+            continue;
         }
         if(!(line_stream >> y >> z)){
             // ERROR: 3 float points are MANDATORY
+            continue;
         }
       }
       points.push_back(VecFloat(x,y,z));
