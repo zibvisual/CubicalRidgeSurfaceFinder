@@ -491,6 +491,20 @@ TEST_CASE("Ridge Surface Finder", "[rsf]")
     }
 }
 
+TEST_CASE("Shifting of points", "[rsf]")
+{
+    auto progressbar = progressbar::Progressbar(progressbar::NoReport);
+    ridgesurface::CubicalRidgeSurfaceFinder m_finder(progressbar);
+
+    auto img = RawField<float>::load(__DATAPATH__+"/surfaces/simple_ridge.npy");
+    m_finder.setInput(&img.get_view());
+    m_finder.setThresholds(0.5f,1.5f);
+
+    // m_finder.addSeed(ridgesurface::Seed::Seedpoint(VecFloat(4.9f), 50.0f));
+    auto loc = m_finder.movePointToRidge(VecFloat(4.9f), 10.0f);
+    REQUIRE(loc != VecFloat(4.9f));
+}
+
 TEST_CASE("BitFace", "[face]"){
     const auto face1 = BitFace(VecSize(1,2,3), Direction::UP);
     REQUIRE(face1.toIndex() == 0x2000030000200001);

@@ -26,6 +26,7 @@
 #include "FacesToCubicalMesh.hpp"
 #include <utils/Range.hpp>
 #include <rsf/SeedIterator.hpp>
+#include <rsf/CubicalRidgeSurfaceFinderSettings.hpp>
 
 
 namespace futil
@@ -75,6 +76,12 @@ namespace ridgesurface
         // Seed changes
         std::size_t numOfSeeds() const;
         uint64_t addSeed(Seed seed);
+        /**
+         * Check if the seed is valid in the sense that it would be a valid seedpoint candidate.
+         * 
+         * Usually skipping invalid seeds generates better results.
+         */
+        bool validSeed(Seed seed) const;
         void updateSeed(uint64_t id, Seed seed);
         bool removeSeed(uint64_t id);
         void clearSeeds();
@@ -84,15 +91,17 @@ namespace ridgesurface
 
         // get a suggested seedpoint, if possible (if no seedpoint was set, returns None)
         std::optional<VecFloat> getSeedpointCandidate(float minDistanceRel);
-        // get a suggested seedpoint which is also allowed to be shifet (at most distance)
+        // get a suggested seedpoint which is also allowed to be shifted (by distance)
         std::optional<VecFloat> getSeedpointCandidate(float minDistanceRel, float distance);
 
         /**
          * @brief Move the given point in the direction of the ridge (use of FM).
          * 
-         * A good heuristic for the distance of the moving point is 10% of the patch distance. 
+         * A good heuristic for the distance of the moving point is 10% of the patch distance
+         * or if known the distance of the seed to the next ridge.
          */ 
         VecFloat movePointToRidge(VecFloat point, float distance);
+        void moveSeedToRidge(Seed& seed, float distance);
 
         int removeSeedpointCandidates();
         int removeSeedpointCandidates(float minDistance);
@@ -246,8 +255,20 @@ namespace ridgesurface
         // cached lattice
         Lattice m_lattice;
 
+        // TODO: instead of unordered_maps, we can make use of container with 3 vecs (2 mappings, one containing elements),
+        // TODO: where each removal is done by swapping -> random order iteration
+        // TODO: as a lot of vectors/mappings are currently depending on it, we might want to 
+        // TODO: be able to share the mapping (and do the same removal for all of them)
+        // TODO: by some valid operations --> some values are "turned off" for debug for example (--> compiler debug?!)
+        // TODO: but everything else is synchronized!
+        // TODO: fields to change:
+        // TODO: m_seeds, m_seeds_voxels, m_debug_poles, m_debug_excentricity, m_patch_orientation, m_seedpoint_candidates
+
         // void initMemory();
         // void freeMemory();
+
+    public:
+        CubicalRidgeSurfaceFinderSettings settings;
     };
 
 } // namespace ridgesurface

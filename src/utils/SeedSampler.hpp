@@ -7,10 +7,13 @@
 #include "Dims.hpp"
 #include "UnionFind.hpp"
 
+#include <fastmarching/FastMarching.hpp>
+#include <fastmarching/FastMarchingBitSetObserver.hpp>
+
 /**
  * Generated sample points to use for seed points in the Ridge Surface Finder. Threshold must be positive.
  */
-std::vector<uint32_t> sample(const float* data, Dims dims, float threshold = 0.0f){
+std::vector<uint32_t> sample(const float* data, Dims dims, float threshold = 0.01f){
     auto uf = UnionFind(dims.size());
 
     // generate the components
@@ -57,4 +60,58 @@ std::vector<uint32_t> sample(const float* data, Dims dims, float threshold = 0.0
         result.push_back(pair.second.second);
     }
     return result;
+}
+
+std::vector<uint32_t> greedyFmSampling(const RawFieldView<float>& data, float distance, float min, float max, std::size_t maxPoints = std::numeric_limits<std::size_t>::max())
+{
+    progressbar::Progressbar report = progressbar::Progressbar(progressbar::ProgressbarReportLevel::NoReport);
+
+    // sort by magnitude of the data
+    std::priority_queue<std::pair<float, uint64_t> > queue;
+    // create FM with a observer which sets the bitfield
+    // TODO: instead of creating a new progressbar, we want to use the same (progressbar must be made smarter)
+    progressbar::Progressbar fm_report = progressbar::Progressbar(progressbar::ProgressbarReportLevel::NoReport);
+    auto fm = fastmarching::FastMarching<fastmarching::ObserverBitSet<mutil::HashMapMappingView<BigHashMap<uint64_t, float>>>>(fm_report);
+    fm.observer().resize(data.dims().size());
+    fm.data(&data);
+    fm.thresholds(min, max);
+    fm.maxDistance(distance);
+
+    // push queue with all values
+    for(std::size_t i = 0; i < data.dims().size(); ++i){
+        float val = data.data()[i];
+        if(val > min){
+            queue.push({val, i});
+        }
+    }
+    const float queue_max = static_cast<float>(queue.size());
+    const float points_max = static_cast<float>(maxPoints);
+
+    // greedy algo
+    report.start("Searching for seed points");
+    auto points = std::vector<uint32_t>();
+    while (!queue.empty() && points.size() < maxPoints)
+    {
+        std::pair<float, uint64_t> entry = queue.top();
+        queue.pop();
+        auto index = entry.second;
+
+        // near another seed point?
+        if(fm.observer().bitset()[index]){
+            continue;
+        }
+        
+        // set point and run fm
+        points.push_back(index);
+        fm.setStartVoxel(index);
+        fm.march();
+
+        if(points.size() % 128 == 0){
+            report.update(fmt::format("Queue: ({:d})", queue.size()));
+            report.update(std::max((queue_max - queue.size()) / queue_max, points.size() / points_max));
+        }
+    }
+    report.end();
+
+    return points;
 }

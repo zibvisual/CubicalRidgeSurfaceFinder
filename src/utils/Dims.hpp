@@ -137,3 +137,9 @@ private:
     std::size_t m_y;
     std::size_t m_z;
 };
+
+inline std::ostream& operator<<(std::ostream& os, const Dims& dims)
+{
+    os << "["<< dims.x() << ", " << dims.y() << ", " << dims.z() << "]";
+    return os;
+}

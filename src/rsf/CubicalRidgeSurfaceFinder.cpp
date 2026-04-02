@@ -259,6 +259,15 @@ namespace ridgesurface
         return m_lattice.worldPosition(gridPos);
     }
 
+    void CubicalRidgeSurfaceFinder::moveSeedToRidge(Seed& seed, float distance)
+    {
+        if(seed.isPoint())
+        {
+            auto loc = movePointToRidge(seed.firstPoint(), distance);
+            seed.getPoint()->point = loc;
+        }
+    }
+
     int
     CubicalRidgeSurfaceFinder::removeSeedpointCandidates()
     {
@@ -328,6 +337,12 @@ namespace ridgesurface
         m_seeds.insert({id, seed});
         m_seeds_update.insert(id);
         return id;
+    }
+
+    bool CubicalRidgeSurfaceFinder::validSeed(Seed seed) const
+    {
+        const float border_distance_threshold = settings.border_distance_threshold(m_lattice, seed.getDistance());
+        return m_lattice.distanceToImageBorder(seed.firstPoint()) > border_distance_threshold;
     }
 
     void CubicalRidgeSurfaceFinder::updateSeed(uint64_t id, Seed seed)
@@ -447,7 +462,7 @@ namespace ridgesurface
         if(points.size() > 0)
         {
             auto d = vertex_data<float>{points, data};
-            write_vertexset(op + "seeds_to_add", d);
+            write_vertexset(op + "seeds_to_add.tgf", d);
         }
         data.clear();
         points.clear();
@@ -461,19 +476,19 @@ namespace ridgesurface
         if(points.size() > 0)
         {
             auto d = vertex_data<float>{points, data};
-            write_vertexset(op + "seeds_in_surface", d);
+            write_vertexset(op + "seeds_in_surface.tgf", d);
         }
         data.clear();
         points.clear();
 
         // seedpoint graph
         auto seedpoint_graph = generateSeedpointGraph();
-        seedpoint_graph.save_as_tgf(op + "seedpoint_graph");
-        seedpoint_graph.save_as_lineset(op + "seedpoint_graph");
+        seedpoint_graph.save_as_tgf(op + "seedpoint_graph.tgf");
+        seedpoint_graph.save_as_lineset(op + "seedpoint_graph.sls");
 
         // poles
         auto poles = generatePoles();
-        poles.save(op + "/rsf_poles");
+        poles.save(op + "poles.sls");
     }
 
     // void
@@ -641,7 +656,6 @@ namespace ridgesurface
         const float threshold = 0.25f;
         if(excentricity > threshold){
             // skip patch
-            std::cout << "Skipped patch " << id << " as excentricity is " << excentricity << std::endl;
             return false;
         }
 
@@ -656,7 +670,6 @@ namespace ridgesurface
         // other considerations:
         // save possible candidates -> this is done in addPatch!
         // m_graph is changed in update_neighbor_graph
-
         return true;
     }
 
@@ -779,11 +792,12 @@ namespace ridgesurface
         // Generate a graph of the connections of the faces of the patch (m_patch)
         auto face_graph = FaceGraph::createWithID(m_patch, m_lattice.dims());
 
+        // find seed point candidates!
         auto it = face_graph.borderBegin();
         auto end = face_graph.borderEnd();
 
-        // only insert candidates if not at the image border (min of 5% of distance to march or 5% of image size)
-        const float border_distance_threshold = m_lattice.voxelsize().length() * std::min(m_seeds[id].getDistance(), m_lattice.centerbox().min()) * 0.1;
+        // only insert candidates if not at the image border (min of distance to march or image size)
+        const float border_distance_threshold = settings.border_distance_threshold(m_lattice, m_seeds[id].getDistance());
         while (it != end)
         {
             // check distance to image border
@@ -804,6 +818,8 @@ namespace ridgesurface
     surface::SurfaceUpdate
     CubicalRidgeSurfaceFinder::recalculate()
     {
+        std::cout << "image bbox: " << m_probability->lattice().cornerbox() << std::endl;
+
         // clear data
         m_graph.clear();
         m_surface_writer.clear();
@@ -1292,8 +1308,12 @@ namespace ridgesurface
         //  int64_t pointId = HxLattice3::gridPositionToIndex(dims, gridPoint);
 
         m_fm.data(m_probability);
-        auto iter = seed.getVoxelSources(m_lattice);
-        m_fm.setStartVoxels(iter.begin(), iter.end());
+
+        m_fm.setStartPoint(seed.firstPoint());
+
+        // code for seed lines, but currently creates a bug where points are out of bounds.
+        // auto iter = seed.getVoxelSources(m_lattice);
+        // m_fm.setStartVoxels(iter.begin(), iter.end());
         m_fm.maxDistance(seed.getDistance());
         m_fm.march();
 
@@ -1451,7 +1471,6 @@ namespace ridgesurface
         {
             // TODO: make this error more formal (not just an std::cout output)
             std::cout << "could not generate patch " << id << " with seed point " << m_seeds[id].firstPoint() << " , as both poles contain the same locale minima" << std::endl;
-            // TODO: somehow this return creates a "stuck" algo where each other iteration also ends here...
             return;
         }
 

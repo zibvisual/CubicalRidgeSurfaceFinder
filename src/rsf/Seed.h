@@ -248,6 +248,11 @@ namespace ridgesurface
             return id == POINT;
         }
 
+        SeedPoint* getPoint()
+        {
+            return isPoint()? &point : nullptr;
+        }
+
         bool
         isLine() const
         {
