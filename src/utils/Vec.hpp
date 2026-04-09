@@ -10,6 +10,10 @@ class Dims;
 class VecFloat;
 class VecSize;
 
+template <typename T> int sgn(T val) {
+    return (T(0) < val) - (val < T(0));
+}
+
 class VecInt
 {
 public:
@@ -56,6 +60,7 @@ public:
     std::optional<VecSize> tryVecSize() const;
 
     explicit operator VecSize() const;
+    explicit operator VecFloat() const;
 
 private:
     std::array<int, 3> m_values;
@@ -131,6 +136,10 @@ public:
     /** Return the minimal component value */
     float min() const;
     float max() const;
+
+    /** Returns -1, 0 or 1 in each dimension */
+    VecInt sign() const;
+    const VecFloat abs() const;
 
     /** Return a vec with the minimum of the vec component and the given scalar */
     VecFloat min(float min) const;

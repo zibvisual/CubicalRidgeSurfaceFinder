@@ -6,7 +6,9 @@
 #include "Faces.hpp"
 
 /**
- * @brief We assume to start from the middle of the voxel and go into a direction
+ * @brief We assume to start from the middle of the voxel and go into a direction. We iterate through Faces, not Voxels
+ * 
+ * Amanatides and Woo Algorithm
  *
  * @param pStart
  * @return Face
@@ -107,3 +109,143 @@ amanatides(VecInt pStart, VecInt pEnd, Lattice lattice, Breaker breaker)
 
     return std::optional<Face>();
 }
+
+/**
+ * Iteratator to iterate through voxels, given a direction.
+ */
+struct VoxelTracer {
+    using value_type = VecSize;
+    using iterator_category = std::forward_iterator_tag;
+    using difference_type   = std::ptrdiff_t;
+    using pointer           = value_type;
+    using reference         = value_type;
+
+    VoxelTracer(VecSize pos, VecFloat direction, Lattice lattice)
+    : dims(lattice.dims())
+    , voxelsize(lattice.voxelsize())
+    , step(direction.sign())
+    , tDelta((voxelsize / direction).abs())
+    , pos(static_cast<VecInt>(pos))
+    , tMax(tDelta * 0.5f)
+    {}
+
+    void advance()
+    {
+        if (tMax.x() < tMax.y())
+        {
+            if (tMax.x() < tMax.z())
+            {
+                pos[0] += step[0];
+                if(pos.x() < 0 || pos.x() >= dims.x()) return;
+                tMax[0] += tDelta[0];
+            }
+            else
+            {
+                pos[2] += step[2];
+                if(pos.z() < 0 || pos.z() >= dims.z()) return;
+                tMax[2] += tDelta[2];
+            }
+        }
+        else
+        {
+            if (tMax.y() < tMax.z())
+            {
+                pos[1] += step[1];
+                if(pos.y() < 0 || pos.y() >= dims.y()) return;
+                tMax[1] += tDelta[1];
+            }
+            else
+            {
+                pos[2] += step[2];
+                if(pos.z() < 0 || pos.z() >= dims.z()) return;
+                tMax[2] += tDelta[2];
+            }
+        }
+    }
+
+    bool finished() const
+    {
+        return !dims.contains(pos);
+    }
+
+    /** UB if called without checking if iterator is already finished */
+    value_type current() const
+    {
+        return static_cast<VecSize>(pos);
+    }
+
+    std::optional<value_type>
+    next()
+    {
+        if (finished())
+        {
+            return std::optional<value_type>();
+        }
+
+        value_type val = current();
+        advance();
+
+        return std::optional<value_type>(val);
+    }
+
+    operator bool() const
+    {
+        return !finished();
+    }
+
+    reference operator*() const
+    {
+        return current();
+    }
+    pointer operator->()
+    {
+        return current();
+    }
+
+    // Prefix increment
+    VoxelTracer &operator++()
+    {
+        advance();
+        return *this;
+    }
+
+    // Postfix increment
+    VoxelTracer operator++(int)
+    {
+        auto tmp = *this;
+        ++(*this);
+        return tmp;
+    }
+
+    VoxelTracer
+    begin() const
+    {
+        return VoxelTracer(dims, voxelsize, step, tDelta, pos, tMax);
+    }
+
+    iter::IteratorEndSentinel
+    end() const
+    {
+        return {};
+    }
+
+protected:
+    VoxelTracer(const Dims dims, const VecFloat voxelsize, const VecInt step, const VecFloat tDelta, const VecInt pos, const VecFloat tMax)
+    : dims(dims)
+    , voxelsize(voxelsize)
+    , step(step)
+    , tDelta(tDelta)
+    , pos(pos)
+    , tMax(tMax)
+    {}
+
+    // constant during traversal
+    Dims dims;
+    VecFloat voxelsize;
+    VecInt step;
+    VecFloat tDelta;
+
+    // changes during traversal
+    VecInt pos;
+    VecFloat tMax;
+};

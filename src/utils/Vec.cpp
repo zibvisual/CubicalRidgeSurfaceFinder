@@ -109,6 +109,15 @@ VecInt::operator VecSize() const {
     );
 }
 
+VecInt::operator VecFloat() const
+{
+    return VecFloat(
+        static_cast<float>(m_values[0]),
+        static_cast<float>(m_values[1]),
+        static_cast<float>(m_values[2])
+    );
+}
+
 const VecInt VecInt::LEFT = {-1, 0, 0};
 const VecInt VecInt::RIGHT = {1, 0, 0};
 const VecInt VecInt::UP = {0, 1, 0};
@@ -241,6 +250,16 @@ float VecFloat::min() const
 float VecFloat::max() const
 {
     return std::max(std::max(m_values[0], m_values[1]), m_values[2]);
+}
+
+VecInt VecFloat::sign() const
+{
+    return VecInt(sgn(m_values[0]), sgn(m_values[1]), sgn(m_values[2]));
+}
+
+const VecFloat VecFloat::abs() const
+{
+    return VecFloat(fabs(m_values[0]), fabs(m_values[1]), fabs(m_values[2]));
 }
 
 VecFloat VecFloat::min(float min) const

@@ -26,6 +26,8 @@
 #include <rsf/CubicalRidgeSurfaceFinder.h>
 #include <io/vertexset.hpp>
 
+#include <rsf/Amanatides.hpp>
+
 #include <iostream>
 
 using Catch::Matchers::WithinULP;
@@ -540,4 +542,25 @@ TEST_CASE("BitFace", "[face]"){
     const auto face3 = BitFace(VecSize(1,2,3), Direction::LEFT);
     REQUIRE(face3.toIndex() == 0x9000030000200001);
     REQUIRE(face3.startVoxel() == VecSize(1,2,3));
+}
+
+TEST_CASE("VoxelTracer", "[voxel]"){
+    auto field = RawField<float>(Dims(100,11,11));
+    float counter = 1.0f;
+    for(auto pos : VoxelTracer(VecSize(1,5,5), VecFloat(1.0f, 0.1f, -0.05f), field.lattice()))
+    {
+        field.set(pos, counter);
+        counter += 1.0f;
+    }
+    field.save(__DATAPATH__+"/output/voxeltracer.npy");
+    REQUIRE(field.get(VecSize(1,5,5)).value() == 1.0f);
+    REQUIRE(field.get(VecSize(6,5,5)).value() == 6.0f);
+    REQUIRE(field.get(VecSize(6,6,5)).value() == 7.0f);
+    REQUIRE(field.get(VecSize(6,6,5)).value() == 7.0f);
+    REQUIRE(field.get(VecSize(11,6,5)).value() == 12.0f);
+    REQUIRE(field.get(VecSize(11,6,4)).value() == 13.0f);
+    REQUIRE(field.get(VecSize(16,6,4)).value() == 18.0f);
+    REQUIRE(field.get(VecSize(16,7,4)).value() == 19.0f);
+    // repeats at (21,7,4)
+    REQUIRE(field.get(VecSize(26,7,4)).value() == 29.0f);
 }
