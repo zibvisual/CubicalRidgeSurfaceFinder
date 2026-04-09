@@ -383,8 +383,7 @@ int main(int argc, char *argv[])
         
         auto surf = surface::StaticSurface();
         m_finder.finalize(&surf);
-        std::filesystem::path default_output_name = input_name;
-        default_output_name = default_output_name.replace_filename(input_name.stem().concat("_rsf")).replace_extension("obj");
+        std::filesystem::path default_output_name = input_name.stem().concat("_rsf_finalized.obj");
         const auto output_name = program.present("-o").value_or(default_output_name);
         surf.save(output_name);
         std::cout << "Saved result in " << output_name << std::endl;
