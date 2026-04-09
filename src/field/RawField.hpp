@@ -300,6 +300,44 @@ public:
         m_view.fill(fillValue);
     }
 
+    /** Extends the image, copies the data at the border and slowly fades to the given value. Panics if image is empty. */
+    RawField extend(std::size_t voxels) const {
+        auto lattice = m_view.lattice();
+        lattice.extendByVoxels(voxels);
+        auto field = RawField<T>(lattice);
+        T* data = field.data();
+
+        if(m_view.empty()){
+            throw std::invalid_argument("Empty fields cannot be extended.");
+        }
+
+        VecInt max_int = VecInt(m_view.lattice().dims().x() - 1, m_view.lattice().dims().y() - 1, m_view.lattice().dims().z() - 1);
+        VecSize max_size = VecSize(m_view.lattice().dims().x() - 1, m_view.lattice().dims().y() - 1, m_view.lattice().dims().z() - 1);
+
+        // copy data
+        std::size_t counter = 0;
+        for(std::size_t z = 0; z < lattice.dims().z(); ++z){
+            for(std::size_t y = 0; y < lattice.dims().y(); ++y){
+                for(std::size_t x = 0; x < lattice.dims().x(); ++x){
+                    VecInt gridPos = VecInt(x,y,z);
+                    // int to_min_distance = gridPos.max();
+                    // int to_max_distance = (max_int - gridPos).max();
+                    // int dist = std::max(std::min(to_min_distance, to_max_distance), static_cast<int>(voxels));
+                    // float factor = static_cast<float>(dist) / voxels;
+                    // translate by voxels
+                    VecInt translated = gridPos - voxels;
+                    // clamp with VecSize
+                    VecSize res = translated.clamp(max_size);
+                    // T orig = m_view.get(res).value();
+                    // data[counter++] = dist > 0 ? (orig * factor + outsideValue * (1.0 - factor)) : orig;
+                    data[counter++] = m_view.get(res).value();
+                }
+            }
+        }
+
+        return field;
+    }
+
     void setUndefinedValue(T undefinedValue) {
         m_view.setUndefinedValue(undefinedValue);
     }

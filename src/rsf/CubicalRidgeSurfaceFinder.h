@@ -121,6 +121,10 @@ namespace ridgesurface
          */
         void finalize(surface::StaticSurface* surface);//, HxSpatialGraph* graph);
 
+        FacesToCubicalMesh& getTransformer() {
+            return m_surface_writer;
+        }
+
         // --------  Debug ------------------
         // void castToTwoLabels(unsigned char* labels);
         // void castCurrentSeedLabels(unsigned char* labels);

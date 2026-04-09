@@ -505,6 +505,31 @@ TEST_CASE("Shifting of points", "[rsf]")
     REQUIRE(loc != VecFloat(4.9f));
 }
 
+TEST_CASE("Extension of image", "[rsf]")
+{
+    auto orig = RawField<float>::load(__DATAPATH__+"/volumes/npy/grayimage01_333.npy");
+    const auto voxels = 2;
+    auto extended = orig.extend(voxels);
+
+    REQUIRE(extended.dims() == Dims(7));
+    REQUIRE(extended.getVoxelSize() == orig.getVoxelSize());
+    REQUIRE(extended.getCenterBoundingBox() == CenterBBox(VecFloat(-2.0),VecFloat(4.0)));
+
+    // values
+    for(std::size_t z = 0; z < extended.dims().z(); ++z){
+        for(std::size_t y = 0; y < extended.dims().y(); ++y){
+            for(std::size_t x = 0; x < extended.dims().x(); ++x){
+                auto ox = std::min(x < voxels ? 0 : x - voxels, orig.dims().x() - 1);
+                auto oy = std::min(y < voxels ? 0 : y - voxels, orig.dims().y() - 1);
+                auto oz = std::min(z < voxels ? 0 : z - voxels, orig.dims().z() - 1);
+                REQUIRE(extended.get(VecSize(x,y,z)).has_value());
+                REQUIRE(orig.get(VecSize(ox, oy, oz)).has_value());
+                REQUIRE(extended.get(VecSize(x,y,z)).value() == orig.get(VecSize(ox, oy, oz)).value());
+            }
+        }
+    }
+}
+
 TEST_CASE("BitFace", "[face]"){
     const auto face1 = BitFace(VecSize(1,2,3), Direction::UP);
     REQUIRE(face1.toIndex() == 0x2000030000200001);

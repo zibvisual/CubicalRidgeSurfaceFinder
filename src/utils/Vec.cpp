@@ -4,6 +4,25 @@
 
 #include "Dims.hpp"
 
+int VecInt::min() const
+{
+    return std::min(std::min(m_values[0], m_values[1]), m_values[2]);
+}
+
+int VecInt::max() const
+{
+    return std::max(std::max(m_values[0], m_values[1]), m_values[2]);
+}
+
+VecSize VecInt::clamp(VecSize max) const
+{
+    return VecSize(
+        m_values[0] < 0 ? 0 : std::min(static_cast<std::size_t>(m_values[0]),max[0]),
+        m_values[1] < 0 ? 0 : std::min(static_cast<std::size_t>(m_values[1]),max[1]),
+        m_values[2] < 0 ? 0 : std::min(static_cast<std::size_t>(m_values[2]),max[2])
+    );
+}
+
 const VecInt VecInt::operator+(const VecInt &other) const
 {
     return VecInt(
@@ -97,6 +116,9 @@ const VecInt VecInt::DOWN = {0, -1, 0};
 const VecInt VecInt::FORWARD = {0, 0, -1};
 const VecInt VecInt::BACKWARD = {0, 0, 1};
 
+const VecSize VecSize::MIN = {0, 0, 0};
+const VecSize VecSize::MAX = {std::numeric_limits<std::size_t>::max(), std::numeric_limits<std::size_t>::max(), std::numeric_limits<std::size_t>::max()};
+
 VecSize VecSize::min(std::size_t min) const{
     return VecSize(
         std::min(m_values[0], min),
@@ -149,8 +171,41 @@ VecSize VecSize::clamp(Dims dims) const{
     );
 }
 
+bool VecSize::inside(VecSize min, VecSize max) const
+{
+    return 
+        min[0] < m_values[0] && max[0] > m_values[0] &&
+        min[1] < m_values[1] && max[1] > m_values[1] &&
+        min[2] < m_values[2] && max[2] > m_values[2];
+}
+
+bool VecSize::outside(VecSize min, VecSize max) const
+{
+    return 
+        min[0] > m_values[0] || max[0] < m_values[0] ||
+        min[1] > m_values[1] || max[1] < m_values[1] ||
+        min[2] > m_values[2] || max[2] < m_values[2];
+}
+
+bool VecSize::lcopen(VecSize min, VecSize max) const
+{
+    return 
+        min[0] <= m_values[0] && max[0] > m_values[0] &&
+        min[1] <= m_values[1] && max[1] > m_values[1] &&
+        min[2] <= m_values[2] && max[2] > m_values[2];
+}
+
 bool VecSize::operator==(const VecSize& rhs) const {
     return m_values[0] == rhs.m_values[0] && m_values[1] == rhs.m_values[1] && m_values[2] == rhs.m_values[2];
+}
+
+const VecSize VecSize::operator+(const VecSize& other) const
+{
+    return VecSize(
+        other.x() + m_values[0],
+        other.y() + m_values[1],
+        other.z() + m_values[2]
+    );
 }
 
 VecSize::operator VecInt() const {
@@ -239,6 +294,14 @@ VecFloat& VecFloat::operator+=(const VecFloat& other)
     return *this;
 }
 
+VecFloat& VecFloat::operator-=(const VecFloat& other)
+{
+    this->m_values[0] -= other[0];
+    this->m_values[1] -= other[1];
+    this->m_values[2] -= other[2];
+    return *this;
+}
+
 const VecFloat VecFloat::operator-(const VecFloat &other) const
 {
     return VecFloat(
@@ -300,6 +363,18 @@ float VecFloat::length() const
 
 float VecFloat::distance(const VecFloat& other) const {
     return ((*this) - other).length();
+}
+
+std::optional<VecFloat> VecFloat::normalize() const {
+    float len = length();
+    if (len < 1e-9f) {
+        return {};
+    }
+    return VecFloat(
+        m_values[0] / len,
+        m_values[1] / len,
+        m_values[2] / len
+    );
 }
 
 bool VecFloat::lexicographic_order_exact(const VecFloat& other) const {

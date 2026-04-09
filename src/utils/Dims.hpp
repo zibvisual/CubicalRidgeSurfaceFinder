@@ -33,6 +33,11 @@ public:
 
     bool empty() const
     {
+        return m_x == 0 || m_y == 0 || m_z == 0;
+    }
+
+    bool unit() const
+    {
         return m_x == 0 && m_y == 0 && m_z == 0;
     }
 

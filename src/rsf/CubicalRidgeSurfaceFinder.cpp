@@ -249,10 +249,13 @@ namespace ridgesurface
 
     VecFloat CubicalRidgeSurfaceFinder::movePointToRidge(VecFloat point, float distance)
     {
+        auto const level = m_progressbar.level();
+        m_progressbar.level(progressbar::ProgressbarReportLevel::NoReport);
         m_fm.data(m_probability);
         m_fm.setStartPoint(point);
         m_fm.maxDistance(distance);
         m_fm.march();
+        m_progressbar.level(level);
         auto voxel_index = m_fm.stoppedAt();
         // convert to point again
         auto gridPos = m_lattice.gridLocationFromCIndex(voxel_index,m_probability->dims());
@@ -818,8 +821,6 @@ namespace ridgesurface
     surface::SurfaceUpdate
     CubicalRidgeSurfaceFinder::recalculate()
     {
-        std::cout << "image bbox: " << m_probability->lattice().cornerbox() << std::endl;
-
         // clear data
         m_graph.clear();
         m_surface_writer.clear();
@@ -969,8 +970,7 @@ namespace ridgesurface
             }
         }
 
-        auto mesh_helper = FacesToCubicalMesh();
-        mesh_helper.populateSurface(surface, m_lattice, faces.begin(), faces.end());
+        m_surface_writer.populateSurface(surface, m_lattice, faces.begin(), faces.end());
 
         // create all graph vertices by going through the seed points
         // for (auto seed : m_seeds)
@@ -1470,7 +1470,7 @@ namespace ridgesurface
         if(flooding.streamflood({ firstFace, secondFace }))
         {
             // TODO: make this error more formal (not just an std::cout output)
-            std::cout << "could not generate patch " << id << " with seed point " << m_seeds[id].firstPoint() << " , as both poles contain the same locale minima" << std::endl;
+            std::cout << "could not generate patch " << id << " with seed point " << m_seeds[id].firstPoint() << ", as both poles contain the same locale minima" << std::endl;
             return;
         }
 

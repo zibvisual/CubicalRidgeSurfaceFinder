@@ -32,6 +32,11 @@ public:
         while (it != end)
         {
             Face face = *it;
+            ++it;
+            // filter
+            if(!face.startVoxel(lattice.dims()).lcopen(m_clip_min, m_clip_max)){
+                continue;
+            }
             auto corners = face.cornerIndices(lattice.dims());
             auto corner_positions = face.cornerPosition(lattice);
             for (std::size_t i = 0; i < 4; ++i)
@@ -55,7 +60,6 @@ public:
                 m_voxelToMeshPoint[corners[2]],
                 m_voxelToMeshPoint[corners[3]]
             );
-            ++it;
         }
 
         surface->finishNewPatch(patch, point_start, triangle_start);
@@ -73,6 +77,11 @@ public:
         while (it != end)
         {
             Face face = *it;
+            ++it;
+            // filter
+            if(!face.startVoxel(lattice.dims()).lcopen(m_clip_min, m_clip_max)){
+                continue;
+            }
             auto corners = face.cornerIndices(lattice.dims());
             auto corner_positions = face.cornerPosition(lattice);
             for (std::size_t i = 0; i < 4; ++i)
@@ -95,7 +104,6 @@ public:
                 m_voxelToMeshPoint[corners[2]],
                 m_voxelToMeshPoint[corners[3]]
             );
-            ++it;
         }
 
         builder.endPatch();
@@ -128,6 +136,11 @@ public:
         while (it != end)
         {
             Face face = *it;
+            ++it;
+            // filter
+            if(!face.startVoxel(lattice.dims()).lcopen(m_clip_min, m_clip_max)){
+                continue;
+            }
             auto corners = face.cornerIndices(lattice.dims());
             auto corner_positions = face.cornerPosition(lattice);
             for (std::size_t i = 0; i < 4; ++i)
@@ -151,7 +164,6 @@ public:
                 m_voxelToMeshPoint[corners[2]],
                 m_voxelToMeshPoint[corners[3]]
             );
-            ++it;
         }
     }
 
@@ -186,6 +198,14 @@ public:
         m_voxelToMeshPoint.clear();
     }
 
+    inline void setClipping(VecSize minInclusive, VecSize maxExclusive)
+    {
+        m_clip_min = minInclusive;
+        m_clip_max = maxExclusive;
+    }
+
 protected:
     std::unordered_map<uint64_t, uint64_t> m_voxelToMeshPoint;
+    VecSize m_clip_min = VecSize::MIN;
+    VecSize m_clip_max = VecSize::MAX;
 };

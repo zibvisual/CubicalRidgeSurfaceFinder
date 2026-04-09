@@ -340,7 +340,8 @@ public:
      */
     std::optional<T> get(FieldLocation location) const
     {
-        if (location.index() >= m_lattice.size())
+        // TODO: change Fieldlocation such that is uses VecSize (but in 21 bits)
+        if (!m_lattice.dims().contains(location.location(m_lattice.dims())))
         {
             return std::optional<T>();
         }
@@ -472,6 +473,11 @@ public:
 
     void setVoxelSize(VecFloat voxelsize){
         m_lattice.setVoxelSize(voxelsize);
+    }
+
+    bool empty() const
+    {
+        return m_lattice.empty();
     }
     
 

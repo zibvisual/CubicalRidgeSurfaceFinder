@@ -111,6 +111,20 @@ public:
         return VecSize(x, y, z);
     }
 
+    /**
+     * Extend the lattice by *voxels* on each side of the image.
+     */
+    void extendByVoxels(std::size_t voxels){
+        m_dims = m_dims.extend(voxels * 2);
+        m_origin -= m_voxelsize * voxels;
+    }
+
+    // TODO:  lattice.gridPositions() Iterator
+    bool empty() const
+    {
+        return m_dims.empty();
+    }
+
 private:
     Dims m_dims;
     VecFloat m_origin;

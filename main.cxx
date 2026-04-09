@@ -25,8 +25,6 @@
 // #include <chrono>
 // #include <thread>
 
-// TODO: make seed input optional, and use automatic seeds and seed sampler if no seed input was set!
-// TODO: then we need some seed threshold and maybe other parameters
 
 namespace {
     template <class T>
@@ -110,6 +108,7 @@ int main(int argc, char *argv[])
     program.add_argument("-a", "--automatic").nargs(1,2).help("Adds more seed points: (min-distance-between-points, [max seedpoints])");
     program.add_argument("--border-margin").default_value(0.1f).scan<'g', float>().help("Threshold when to skip given seed points. Value between 0 and 1.");
     program.add_argument("--shift").nargs(0,1).scan<'g', float>().help("Distance how far a seed point is allowed to shift to go to the ridge.");
+    program.add_argument("--border-padding").nargs(0,1).scan<'i', int>().help("How much the image should be extended. Given by voxel number.");
 
     // spatial information
     auto &centering = program.add_mutually_exclusive_group();
@@ -198,7 +197,7 @@ int main(int argc, char *argv[])
     RawField<float> img;
     try
     {
-        img = RawField<float>::load(program.get("input"));
+        img = RawField<float>::load(program.get("input"), args);
     }
     catch (const std::exception &e)
     {
@@ -256,8 +255,8 @@ int main(int argc, char *argv[])
             VecFloat worldPos = img.lattice().worldPosition(gridLoc);
             seeds.push_back(ridgesurface::Seed(ridgesurface::SeedPoint(VecFloat(worldPos.x(), worldPos.y(), worldPos.z())), program.get<float>("--range")));   
         }
-        std::cout << "Generated " << seeds.size() << " seeds" << std::endl;
         generated_seed_indices.clear();
+        std::cout << "Generated " << seeds.size() << " seeds" << std::endl;
 
         if(debug){
             saveSeeds(debug_path / input_name.stem() / input_name.stem().concat("_rsf_generatedSeeds.obj"), seeds);
@@ -281,6 +280,18 @@ int main(int argc, char *argv[])
         }
     }
 
+    // extend image TODO: do that AFTER shifting.... --> better(?): include border-margin?!
+    Dims originalDims = img.lattice().dims();
+    if(program.is_used("--border-padding")){
+        std::cout << "Extend image by " << program.get<int>("--border-padding") << " voxels" << std::endl;
+        // TODO: if that extend works, use min or a better value
+        img = img.extend(program.get<int>("--border-padding"));
+        if(debug){
+            // TODO: save as nrrd instead
+            img.save(debug_path / input_name.stem() / input_name.stem().concat("_rsf_extendedField.npy"));
+        }
+    }
+
     // run
     try
     {
@@ -299,9 +310,11 @@ int main(int argc, char *argv[])
         ridgesurface::CubicalRidgeSurfaceFinder m_finder(progressbar);
         m_finder.setInput(&img.get_view());
         m_finder.setThresholds(min,max);
-
-        // settings
-        m_finder.settings.image_border_threshold = program.get<float>("--border-margin");
+        if(program.is_used("--border-padding")){
+            VecSize min_clip = VecSize(program.get<int>("--border-padding"));
+            VecSize max_clip = static_cast<VecSize>(originalDims) + min_clip;
+            m_finder.getTransformer().setClipping(min_clip, max_clip);
+        }        
 
         const float default_shift_distance = program.get<float>("--range") * 0.1;
         const std::optional<float> shift_distance = flatten_arg<float>(program, "shift", default_shift_distance);
@@ -314,22 +327,32 @@ int main(int argc, char *argv[])
         }
         
         // skip invalid seeds (only if not sampled by components?)
-        auto skippedSeeds = std::vector<ridgesurface::Seed>();
-        for(auto seed: seeds){
-            if(m_finder.validSeed(seed)){
+        if(program.is_used("--border-margin"))
+        {
+            m_finder.settings.image_border_threshold = program.get<float>("--border-margin");
+            auto skippedSeeds = std::vector<ridgesurface::Seed>();
+            for(auto seed: seeds){
+                if(m_finder.validSeed(seed)){
+                    m_finder.addSeed(seed);
+                }else{
+                    skippedSeeds.push_back(seed);
+                }
+            }
+            if(skippedSeeds.size() > 0){
+                std::cout << "Skipped " << skippedSeeds.size() << " seeds" << std::endl;
+                if(debug)
+                {
+                    saveSeeds(debug_path / input_name.stem() / input_name.stem().concat("_rsf_skippedSeeds.obj"), skippedSeeds);
+                }
+            }
+        }else{
+            for(auto seed: seeds){
                 m_finder.addSeed(seed);
-            }else{
-                skippedSeeds.push_back(seed);
             }
         }
-        if(skippedSeeds.size() > 0){
-            std::cout << "Skipped " << skippedSeeds.size() << " seeds" << std::endl;
-            if(debug)
-            {
-                saveSeeds(debug_path / input_name.stem() / input_name.stem().concat("_rsf_skippedSeeds.obj"), skippedSeeds);
-            }
-        }
+        
 
+        progressbar.level(progressbar::ProgressbarReportLevel::FullReport);
         if(debug){
             patched_surface.update(m_finder.recalculate());
         }else{

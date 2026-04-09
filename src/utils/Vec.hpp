@@ -30,6 +30,12 @@ public:
     inline int y() const {return m_values[1];}
     inline int z() const {return m_values[2];}
 
+    /** Return the minimal component value */
+    int min() const;
+    int max() const;
+
+    VecSize clamp(VecSize max) const;
+
     const VecInt operator+(const VecInt &other) const;
     const VecInt operator+(const int &other) const;
     const VecInt operator-() const;
@@ -67,6 +73,9 @@ class VecSize
 public:
     using value_type = std::size_t;
 
+    static const VecSize MIN;
+    static const VecSize MAX;
+
     VecSize() : m_values({0,0,0}) {}
     VecSize(std::size_t x) : m_values({x,x,x}) {}
     VecSize(std::size_t x, std::size_t y, std::size_t z) : m_values({x,y,z}) {}
@@ -82,13 +91,21 @@ public:
     VecSize min(VecSize min) const;
     VecSize max(VecSize max) const;
     VecSize clamp(VecSize min, VecSize max) const;
-
     VecSize clamp(Dims dims) const;
+
+    bool inside(VecSize min, VecSize max) const;
+    bool outside(VecSize min, VecSize max) const;
+    /**
+     * In Interval [min,max)
+     */
+    bool lcopen(VecSize min, VecSize max) const;
 
     inline std::size_t& operator[](int index) {return m_values[index];}
     inline const std::size_t& operator[](int index) const {return m_values[index];}
 
     bool operator==(const VecSize& rhs) const;
+
+    const VecSize operator+(const VecSize& other) const;
 
     explicit operator VecInt() const;
     explicit operator VecFloat() const;
@@ -133,6 +150,7 @@ public:
     const VecFloat operator/(const VecFloat &other) const;
 
     VecFloat& operator+=(const VecFloat& other);
+    VecFloat& operator-=(const VecFloat& other);
 
     explicit operator VecInt() const;
     explicit operator VecSize() const;
@@ -140,6 +158,7 @@ public:
     float length2() const;
     float length() const;
     float distance(const VecFloat& other) const;
+    std::optional<VecFloat> normalize() const;
 
     bool lexicographic_order_exact(const VecFloat& other) const;
     // This is a valid compare function for sorting (and the translation rule for equiv expression holds true)
