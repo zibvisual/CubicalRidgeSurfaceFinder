@@ -249,3 +249,15 @@ Eigen::Matrix3f structure_tensor(T* data, const Dims dims, const VecInt voxel, c
 
     return tensor;
 }
+
+template <class T>
+VecFloat structure_tensor_direction(T* data, const Dims dims, const VecInt voxel, const float gradient_sigma, const float tensor_sigma)
+{
+    Eigen::Matrix3f tensor = structure_tensor(data, dims, voxel, gradient_sigma, tensor_sigma);
+    // compute the eigen decomposition
+    Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> solver;
+    solver.computeDirect(tensor);
+    auto eigenvectors = solver.eigenvectors();
+    // Most important Eigenvector
+    return VecFloat(eigenvectors(0, 2), eigenvectors(1, 2), eigenvectors(2, 2));
+}

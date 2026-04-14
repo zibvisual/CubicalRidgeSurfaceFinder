@@ -108,6 +108,10 @@ namespace progressbar
         Progressbar():m_reportlevel(ProgressbarReportLevel::FullReport){}
         Progressbar(ProgressbarReportLevel level):m_reportlevel(level){}
 
+        ProgressbarReportLevel level(){
+            return m_reportlevel;
+        }
+
         void level(ProgressbarReportLevel level){
             m_reportlevel = level;
         }

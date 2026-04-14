@@ -249,3 +249,34 @@ protected:
     VecInt pos;
     VecFloat tMax;
 };
+
+template <class T>
+VecSize trace_and_find_max(VecFloat point, VecFloat dir, float distance, const RawFieldView<T>& data, const Lattice& lattice){
+    const int max_streak = 5;
+    const auto pos = lattice.gridLocation(point);
+    auto tracer = VoxelTracer(pos, dir, lattice);
+    auto maxPos = pos;
+    T maxValue = data.get(maxPos).value();
+    int streak_counter = 0;
+    for(auto gridPos : tracer)
+    {
+        // calculate distance
+        if(lattice.worldPosition(gridPos).distance(point) > distance){
+            return maxPos;
+        }
+
+        const T val = data.get(gridPos).value();
+        if(val > maxValue)
+        {
+            maxValue = val;
+            maxPos = gridPos;
+            streak_counter = 0;
+        }else if(val < maxValue){
+            if(++streak_counter > max_streak)
+            {
+                return maxPos;
+            }
+        }
+    }
+    return maxPos;
+}

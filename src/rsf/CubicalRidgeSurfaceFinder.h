@@ -128,7 +128,7 @@ namespace ridgesurface
         // --------  Debug ------------------
         // void castToTwoLabels(unsigned char* labels);
         // void castCurrentSeedLabels(unsigned char* labels);
-        void castToLabels(uint16_t* labels);
+        void castToLabels(uint16_t* labels) const;
         // void castToSeedLabels(unsigned short* labels);
         // void castToSpatialGraph(HxSpatialGraph* graph);
         void castToTime(float* time) const;

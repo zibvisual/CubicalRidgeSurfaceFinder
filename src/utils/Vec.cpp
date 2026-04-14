@@ -351,7 +351,17 @@ const VecFloat VecFloat::operator/(const VecFloat &other) const
     return VecFloat(
         this->m_values[0] / other.m_values[0],
         this->m_values[1] / other.m_values[1],
-        this->m_values[2] / other.m_values[2]);
+        this->m_values[2] / other.m_values[2]
+    );
+}
+
+const VecFloat VecFloat::operator-() const
+{
+    return VecFloat(
+        -this->m_values[0],
+        -this->m_values[1],
+        -this->m_values[2]
+    );
 }
 
 VecFloat::operator VecInt() const {

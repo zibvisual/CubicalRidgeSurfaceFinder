@@ -158,6 +158,8 @@ public:
     const VecFloat operator*(const VecFloat &other) const;
     const VecFloat operator/(const VecFloat &other) const;
 
+    const VecFloat operator-() const;
+
     VecFloat& operator+=(const VecFloat& other);
     VecFloat& operator-=(const VecFloat& other);
 

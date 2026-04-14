@@ -197,7 +197,7 @@ TEST_CASE("Fast Marching", "[fm]")
         // debug: save
         auto dist = RawField<float>(pot.dims());
         fm.distance(dist.data(), dist.dims().size(), false);
-        dist.save(__DATAPATH__+"/output/simple_ridge_dist_test");
+        dist.save(__DATAPATH__+"/output/simple_ridge_dist_test.nrrd");
         
         // compare with amira result
         auto time_ref = RawField<float>::load(__DATAPATH__+"/surfaces/simple_ridge_time_p05-p15_nocap.npy");
@@ -552,7 +552,7 @@ TEST_CASE("VoxelTracer", "[voxel]"){
         field.set(pos, counter);
         counter += 1.0f;
     }
-    field.save(__DATAPATH__+"/output/voxeltracer.npy");
+    field.save(__DATAPATH__+"/output/voxeltracer.nrrd");
     REQUIRE(field.get(VecSize(1,5,5)).value() == 1.0f);
     REQUIRE(field.get(VecSize(6,5,5)).value() == 6.0f);
     REQUIRE(field.get(VecSize(6,6,5)).value() == 7.0f);

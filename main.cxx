@@ -18,9 +18,11 @@
 #include "src/io/vertexset.hpp"
 
 #include <utils/SeedSampler.hpp>
+#include <utils/StructureTensor.hpp>
 
 #include <filesystem>
 #include <vector>
+#include <variant>
 
 // #include <chrono>
 // #include <thread>
@@ -284,11 +286,9 @@ int main(int argc, char *argv[])
     Dims originalDims = img.lattice().dims();
     if(program.is_used("--border-padding")){
         std::cout << "Extend image by " << program.get<int>("--border-padding") << " voxels" << std::endl;
-        // TODO: if that extend works, use min or a better value
         img = img.extend(program.get<int>("--border-padding"));
         if(debug){
-            // TODO: save as nrrd instead
-            img.save(debug_path / input_name.stem() / input_name.stem().concat("_rsf_extendedField.npy"));
+            img.save(debug_path / input_name.stem() / input_name.stem().concat("_rsf_extendedField.nrrd"));
         }
     }
 
@@ -321,8 +321,45 @@ int main(int argc, char *argv[])
 
         // shift seeds
         if(shift_distance){
-            for(auto& seed: seeds){
-                m_finder.moveSeedToRidge(seed, shift_distance.value());
+            const float shift_distance_val = shift_distance.value() * img.getVoxelSize().length();
+
+            std::cout << "Shift seeds by a maximum of " << shift_distance_val  << " distance" << std::endl;
+            if(debug){
+                // record structure tensor vector via lineset
+                auto builder = LineSetBuilder<std::monostate>();
+                const float gradient_sigma = 3.0f;
+                const float tensor_sigma = 2.0f;
+                for(const auto& seed: seeds)
+                {
+                    auto gridPoint = img.lattice().gridLocation(seed.firstPoint());
+                    VecFloat vector = structure_tensor_direction(img.data(), img.dims(), static_cast<VecInt>(gridPoint), gradient_sigma, tensor_sigma);
+                    // project a vector onto 3*voxelsize
+                    VecFloat projected = vector.normalize().value_or(VecFloat(0.0f)) * img.getVoxelSize() * 10;
+                    builder.add_point(seed.firstPoint() - projected, {});
+                    builder.add_point(seed.firstPoint(), {});
+                    builder.add_point(seed.firstPoint() + projected, {});
+                    builder.push_line();
+                }
+                builder.build().save(debug_path / input_name.stem() / input_name.stem().concat("_rsf_structure_tensor_direction.sls"));
+
+                // record shift via lineset
+                auto builder2 = LineSetBuilder<int8_t>();
+                builder2.reserve_lines(seeds.size());
+
+                for(auto& seed: seeds){
+                    builder2.add_point(seed.firstPoint(), 0);
+                    m_finder.moveSeedToRidge(seed, shift_distance_val);
+                    builder2.add_point(seed.firstPoint(), 1);
+                    builder2.push_line();
+                }
+                const auto lineset = builder2.build();
+                lineset.save(debug_path / input_name.stem() / input_name.stem().concat("_rsf_shiftlines.sls"));
+                saveSeeds(debug_path / input_name.stem() / input_name.stem().concat("_rsf_shiftedSeeds.obj"), seeds);
+            }else{
+                // just shift
+                for(auto& seed: seeds){
+                    m_finder.moveSeedToRidge(seed, shift_distance_val);
+                }
             }
         }
         
@@ -383,7 +420,7 @@ int main(int argc, char *argv[])
         
         auto surf = surface::StaticSurface();
         m_finder.finalize(&surf);
-        std::filesystem::path default_output_name = input_name.stem().concat("_rsf_finalized.obj");
+        std::filesystem::path default_output_name = input_name.parent_path() / input_name.stem().concat("_rsf_finalized.obj");
         const auto output_name = program.present("-o").value_or(default_output_name);
         surf.save(output_name);
         std::cout << "Saved result in " << output_name << std::endl;

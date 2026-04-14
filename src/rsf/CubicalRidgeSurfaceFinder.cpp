@@ -249,17 +249,31 @@ namespace ridgesurface
 
     VecFloat CubicalRidgeSurfaceFinder::movePointToRidge(VecFloat point, float distance)
     {
-        auto const level = m_progressbar.level();
-        m_progressbar.level(progressbar::ProgressbarReportLevel::NoReport);
-        m_fm.data(m_probability);
-        m_fm.setStartPoint(point);
-        m_fm.maxDistance(distance);
-        m_fm.march();
-        m_progressbar.level(level);
-        auto voxel_index = m_fm.stoppedAt();
-        // convert to point again
-        auto gridPos = m_lattice.gridLocationFromCIndex(voxel_index,m_probability->dims());
-        return m_lattice.worldPosition(gridPos);
+        // Structure Tensor Shifting
+        const float gradient_sigma = 3.0f;
+        const float tensor_sigma = 2.0f;
+        auto gridPoint = m_lattice.gridLocation(point);
+        VecFloat vector = structure_tensor_direction(m_probability->data(), m_lattice.dims(), static_cast<VecInt>(gridPoint), gradient_sigma, tensor_sigma);
+
+        // Voxeltracer (both directions)
+        auto maxPos1 = trace_and_find_max(point, vector, distance, *m_probability, m_lattice);
+        auto maxPos2 = trace_and_find_max(point, -vector, distance, *m_probability, m_lattice);
+
+        auto maxPos = m_probability->get(maxPos1).value() >= m_probability->get(maxPos2) ? maxPos1 : maxPos2;
+        return m_lattice.worldPosition(maxPos);
+
+        // FM Shifting
+        // auto const level = m_progressbar.level();
+        // m_progressbar.level(progressbar::ProgressbarReportLevel::NoReport);
+        // m_fm.data(m_probability);
+        // m_fm.setStartPoint(point);
+        // m_fm.maxDistance(distance);
+        // m_fm.march();
+        // m_progressbar.level(level);
+        // auto voxel_index = m_fm.stoppedAt();
+        // // convert to point again
+        // auto gridPos = m_lattice.gridLocationFromCIndex(voxel_index,m_probability->dims());
+        // return m_lattice.worldPosition(gridPos);
     }
 
     void CubicalRidgeSurfaceFinder::moveSeedToRidge(Seed& seed, float distance)
@@ -492,6 +506,11 @@ namespace ridgesurface
         // poles
         auto poles = generatePoles();
         poles.save(op + "poles.sls");
+
+        // labels
+        auto labels = RawField<uint16_t>(m_lattice);
+        castToLabels(labels.data());
+        labels.save(op + "labels.nrrd");
     }
 
     // void
@@ -549,7 +568,7 @@ namespace ridgesurface
     // }
 
     void
-    CubicalRidgeSurfaceFinder::castToLabels(uint16_t* labels)
+    CubicalRidgeSurfaceFinder::castToLabels(uint16_t* labels) const
     {
         for (std::size_t i = 0; i < m_lattice.size(); ++i)
         {
@@ -1381,16 +1400,7 @@ namespace ridgesurface
         // get tensor of pointId
         // TODO: we want to allow more than just float values!
         const float* inputData = m_probability->data();
-        Eigen::Matrix3f tensor = structure_tensor(inputData, m_lattice.dims(), static_cast<VecInt>(gridPoint), gradient_sigma, tensor_sigma);
-
-
-        // compute the eigen decomposition
-        Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> solver;
-        solver.computeDirect(tensor);
-        auto eigenvectors = solver.eigenvectors();
-
-        // Most important Eigenvector:
-        VecFloat vector = VecFloat(eigenvectors(0, 2), eigenvectors(1, 2), eigenvectors(2, 2));
+        VecFloat vector = structure_tensor_direction(inputData, m_lattice.dims(), static_cast<VecInt>(gridPoint), gradient_sigma, tensor_sigma);
         // offset vector with some value (Eigenvalue could be used)
         vector = vector * 3 * voxelSize;
         // Find out which point that would be
