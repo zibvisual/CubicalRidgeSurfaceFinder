@@ -10,6 +10,7 @@
 #include <utils/Vec.hpp>
 #include <utils/BBox.hpp>
 #include <utils/Dims.hpp>
+#include <utils/Lattice.hpp>
 
 namespace nrrd {
 
@@ -29,6 +30,58 @@ inline bool is_nrrd_file(std::ifstream& inputFile)
     std::string line;
 
     return std::getline(inputFile, line) && line.starts_with(magic_bytes);
+}
+
+template <typename T>
+void
+write_nrrd(std::ofstream& outputFile, nrrd_data<T> data, std::string encoding = "raw")
+{
+    const auto dims = data.lattice.dims();
+    const auto voxelSize = data.lattice.voxelsize();
+    const auto min = data.lattice.origin();
+    const auto max = data.lattice.centerbox().max_center();
+
+    if(encoding == "raw" && std::endian::native != std::endian::little && std::endian::native != std::endian::big)
+    {
+        std::cout << "Raw nrrd files only possible to be written when native endian is not mixed!" << std::endl;
+        return;
+    }
+
+    outputFile << "NRRD0001" << std::endl
+               << "type: " << to_c_string(stype_t_helper<T>::val) << std::endl
+               << "dimension: 3" << std::endl
+               << "sizes: " << dims.x() << " " << dims.y() << " " << dims.z() << std::endl
+               << "spacings: " << voxelSize[0] << " " << voxelSize[1] << " " << voxelSize[2] << std::endl
+               << "axis mins: " << min[0] << " " << min[1] << " " << min[2] << std::endl
+               << "axis maxs: " << max[0] << " " << max[1] << " " << max[2] << std::endl
+               << "centerings: cell cell cell" << std::endl
+               << "encoding: " << encoding << std::endl;
+
+    if (encoding == "raw")
+    {
+        // we do not include mixed endian
+        outputFile << "endian: " << (std::endian::native == std::endian::little ? "little" : "big") << std::endl;
+    }
+
+    outputFile << std::endl;
+
+    if (encoding == "ascii")
+    {
+        for (std::size_t i = 0; i < data.data.size(); ++i)
+        {
+            outputFile << std::to_string(data.data[i]) << " ";
+
+            if ((i + 1) % 50 == 0)
+            {
+                outputFile << std::endl;
+            }
+        }
+        outputFile << std::endl;
+    }
+    else if (encoding == "raw")
+    {
+        outputFile.write(reinterpret_cast<char*>(data.data.data()), sizeof(T) * data.data.size());
+    }
 }
 
 template <typename T>

@@ -42,7 +42,7 @@ inline std::ofstream path_to_ofstream(std::filesystem::path& output, const std::
     {
         throw std::ios_base::failure("io error: failed to open file \"" + output.string() + "\"");
     }else{
-        std::cout << "Write into file " << output << std::endl;
+        // std::cout << "Write into file " << output << std::endl;
     }
     return stream;
 }
@@ -62,6 +62,35 @@ enum class stype_t
     f32,
     f64,
 };
+
+inline std::string to_c_string(const stype_t& stype)
+{
+    switch (stype)
+    {
+    case stype_t::int8:
+        return "signed char";
+    case stype_t::int16:
+        return "short";
+    case stype_t::int32:
+        return "int";
+    case stype_t::int64:
+        return "long long";
+    case stype_t::uint8:
+        return "unsigned char";
+    case stype_t::uint16:
+        return "unsigned short";
+    case stype_t::uint32:
+        return "unsigned int";
+    case stype_t::uint64:
+        return "unsigned long long";
+    case stype_t::f32:
+        return "float";
+    case stype_t::f64:
+        return "double";
+    default:
+        return "<invalid type>";
+    }
+}
 
 inline std::ostream &operator<<(std::ostream &os, const stype_t &stype)
 {

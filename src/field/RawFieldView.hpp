@@ -9,10 +9,11 @@
 #include <utils/BBox.hpp>
 #include <utils/Lattice.hpp>
 #include <utils/Vec.hpp>
+#include <utils/Direction.hpp>
 #include <io/npy.hpp>
 #include <io/metadata.hpp>
-#include <utils/Direction.hpp>
 #include <io/spatialinfo.hpp>
+#include <io/nrrd.hpp>
 
 /**
  * RawFieldView is a view into a contiguous dataset. The data is not owned by RawFieldView and is not freed by RawFieldView.
@@ -121,7 +122,34 @@ public:
     {
     }
 
-    void save(std::filesystem::path output){
+    void save(std::filesystem::path output)
+    {
+        // check extension
+        if(!output.has_extension()){
+            throw std::invalid_argument("File extension necessary");
+        }
+        auto extension = output.extension();
+        if(extension == ".nrrd"){
+            return save_nrrd(output);
+        }else if (extension == ".npy"){
+            return save_npy(output);
+        }
+        throw std::invalid_argument("Extension not supported");
+    }
+
+    void save_nrrd(std::filesystem::path output){
+        nrrd::nrrd_data<T> data;
+        data.lattice = m_lattice;
+        for(std::size_t i = 0; i < m_lattice.size(); ++i)
+        {
+            data.data.push_back(m_data[i]);
+        }
+
+        auto stream = path_to_ofstream(output, "nrrd");
+        nrrd::write_nrrd(stream, data);
+    }
+
+    void save_npy(std::filesystem::path output){
         npy::npy_data_ptr<T> data;
         data.data_ptr = this->data();
         data.shape = npy::shape_t(m_lattice.dims()[0], m_lattice.dims()[1], m_lattice.dims()[2]);
