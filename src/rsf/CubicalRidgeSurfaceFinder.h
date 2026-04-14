@@ -47,7 +47,7 @@ namespace ridgesurface
     class CubicalRidgeSurfaceFinder
     {
     public:
-        CubicalRidgeSurfaceFinder(progressbar::Progressbar& progress);
+        CubicalRidgeSurfaceFinder(progressbar::Reporter& progress);
         ~CubicalRidgeSurfaceFinder(void);
 
         void setInput(const RawFieldView<float>* probability);
@@ -205,7 +205,7 @@ namespace ridgesurface
         float calculateExcentricity(uint64_t seed) const;
 
         // progressbar
-        progressbar::Progressbar& m_progressbar;
+        progressbar::Reporter& m_progressbar;
 
         // List of seeds. Seed which will but are not yet deleted are stil in this list.
         std::unordered_map<uint64_t, Seed> m_seeds;

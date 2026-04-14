@@ -40,13 +40,13 @@ struct SurfaceUpdate_C {
 
 // Class for handling memory
 struct CRSF_Handle {
-    progressbar::Progressbar progress;
+    progressbar::Reporter progress;
     ridgesurface::CubicalRidgeSurfaceFinder rsf;
     RawFieldView<float> raw;
     surface::SurfaceUpdate update;
 
     CRSF_Handle()
-    : progress(progressbar::Progressbar())
+    : progress(progressbar::Reporter())
     , rsf(ridgesurface::CubicalRidgeSurfaceFinder(progress))
     , raw((RawFieldView<float>(nullptr, Dims(0))))
     , update()

@@ -152,7 +152,7 @@ TEST_CASE("Fast Marching Utilities", "[fm]")
 
 TEST_CASE("Fast Marching", "[fm]")
 {
-    progressbar::Progressbar progress(progressbar::NoReport);
+    progressbar::Reporter progress(progressbar::NoReport);
 
     SECTION("Probobilistic field"){
         // load images
@@ -462,7 +462,7 @@ TEST_CASE("Line Set Data Size", "[lineset]")
 
 TEST_CASE("Ridge Surface Finder", "[rsf]")
 {
-    auto progressbar = progressbar::Progressbar(progressbar::NoReport);
+    auto progressbar = progressbar::Reporter(progressbar::NoReport);
     ridgesurface::CubicalRidgeSurfaceFinder m_finder(progressbar);
 
     SECTION("plane surface"){
@@ -495,7 +495,7 @@ TEST_CASE("Ridge Surface Finder", "[rsf]")
 
 TEST_CASE("Shifting of points", "[rsf]")
 {
-    auto progressbar = progressbar::Progressbar(progressbar::NoReport);
+    auto progressbar = progressbar::Reporter(progressbar::NoReport);
     ridgesurface::CubicalRidgeSurfaceFinder m_finder(progressbar);
 
     auto img = RawField<float>::load(__DATAPATH__+"/surfaces/simple_ridge.npy");

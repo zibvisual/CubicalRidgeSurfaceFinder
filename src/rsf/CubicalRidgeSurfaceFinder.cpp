@@ -56,7 +56,7 @@ namespace
 
 namespace ridgesurface
 {
-    CubicalRidgeSurfaceFinder::CubicalRidgeSurfaceFinder(progressbar::Progressbar& progress)
+    CubicalRidgeSurfaceFinder::CubicalRidgeSurfaceFinder(progressbar::Reporter& progress)
         : m_progressbar(progress)
         , m_seeds()
         , m_seeds_update()
@@ -755,8 +755,8 @@ namespace ridgesurface
                 }
             }
             iter = m_seeds_update.erase(iter);
-            m_progressbar.update(++counter/static_cast<float>(size));
-            m_progressbar.update(fmt::format("Calculate Patches ({:d} / {:d})", counter, size));
+            ++counter;
+            m_progressbar.update(fmt::format("Calculate Patches ({:d} / {:d})", counter, size), counter/static_cast<float>(size));
         }
         update_patch_orientations();
         m_progressbar.end();
@@ -863,8 +863,7 @@ namespace ridgesurface
                 ++counter;
             }
             if (m_progressbar.stop_and_end()) return m_surface_update.build();
-            m_progressbar.update(static_cast<float>(counter) / m_seeds.size());
-            m_progressbar.update(fmt::format("Calculating Patches ({:d} / {:d})", counter, m_seeds.size()));
+            m_progressbar.update(fmt::format("Calculating Patches ({:d} / {:d})", counter, m_seeds.size()), static_cast<float>(counter) / m_seeds.size());
         }
         update_patch_orientations();
         m_progressbar.end();

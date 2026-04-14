@@ -93,11 +93,11 @@ namespace {
 int main(int argc, char *argv[])
 {
     argparse::ArgumentParser program("Ridge Surface Finder", std::to_string(RidgeSurfaceFinder_VERSION_MAJOR) + "." + std::to_string(RidgeSurfaceFinder_VERSION_MINOR));
-    program.add_argument("input").help("Numpy input file to load");
+    program.add_argument("input").help("Input file to load");
 
     // seeds
     auto& input = program.add_mutually_exclusive_group(true);
-    input.add_argument("-s", "--seed").help("Numpy label, wavefront object or float");
+    input.add_argument("-s", "--seed").help("Label field or vertex set");
     input.add_argument("--sample-component").default_value(0.01f).scan<'g', float>().help("Generate one seed point per component (threshold creates mask). Useful with --automatic");
     input.add_argument("--sample-greedy").default_value(40.0f).scan<'g', float>().help("Generate many seedpoint via FM, given by radius.");
 
@@ -138,7 +138,9 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    auto progressbar = progressbar::Progressbar(progressbar::ProgressbarReportLevel::FullReport);
+    auto time_begin = std::chrono::steady_clock::now();
+    auto reporter = progressbar::Reporter();
+    // reporter.start("CRSF");
 
     std::filesystem::path input_name = program.get("input");
     auto debug_setting = flatten_arg(program, "-d", "debug");
@@ -241,11 +243,11 @@ int main(int argc, char *argv[])
     // generate seeds
     if(program.is_used("--sample-greedy") || program.is_used("--sample-component"))
     {
-        std::cout << "Generating seeds" << std::endl;
+        std::cout << "Generate seeds" << std::endl;
         std::vector<uint32_t> generated_seed_indices;
         if(program.is_used("--sample-greedy"))
         {
-            generated_seed_indices = greedyFmSampling(img.get_view(), program.get<float>("--sample-greedy"), min, max);
+            generated_seed_indices = greedyFmSampling(reporter, img.get_view(), program.get<float>("--sample-greedy"), min, max);
         }else if(program.is_used("--sample-component"))
         {
             float threshold = program.get<float>("--sample-component");
@@ -307,7 +309,7 @@ int main(int argc, char *argv[])
 
         std::cout << "Cost intensity range for marching set to [" << min << ", " << max << "]" << std::endl;
 
-        ridgesurface::CubicalRidgeSurfaceFinder m_finder(progressbar);
+        ridgesurface::CubicalRidgeSurfaceFinder m_finder(reporter);
         m_finder.setInput(&img.get_view());
         m_finder.setThresholds(min,max);
         if(program.is_used("--border-padding")){
@@ -357,9 +359,11 @@ int main(int argc, char *argv[])
                 saveSeeds(debug_path / input_name.stem() / input_name.stem().concat("_rsf_shiftedSeeds.obj"), seeds);
             }else{
                 // just shift
+                reporter.start("Shifting all seeds");
                 for(auto& seed: seeds){
                     m_finder.moveSeedToRidge(seed, shift_distance_val);
                 }
+                reporter.end();
             }
         }
         
@@ -388,8 +392,6 @@ int main(int argc, char *argv[])
             }
         }
         
-
-        progressbar.level(progressbar::ProgressbarReportLevel::FullReport);
         if(debug){
             patched_surface.update(m_finder.recalculate());
         }else{
@@ -397,8 +399,6 @@ int main(int argc, char *argv[])
         }
 
         if(automatic_threshold){
-            // TODO support automatic progressbar (we do not know when we finish)
-            progressbar.level(progressbar::ProgressbarReportLevel::FullReport);
             auto max = automatic_max_seedpoints.value_or(std::numeric_limits<uint64_t>::max());
             while(m_finder.numOfSeeds() < max){
                 auto candidate = m_finder.getSeedpointCandidate(automatic_threshold.value(), shift_distance.value_or(default_shift_distance));
@@ -437,5 +437,8 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    // reporter.end();
+    auto time_end = std::chrono::steady_clock::now();
+    std::cout << "CRSF finished! [" << (std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_begin).count() / 1000000.0) << " sec]" << std::endl;
     return 0;
 }

@@ -62,16 +62,12 @@ std::vector<uint32_t> sample(const float* data, Dims dims, float threshold = 0.0
     return result;
 }
 
-std::vector<uint32_t> greedyFmSampling(const RawFieldView<float>& data, float distance, float min, float max, std::size_t maxPoints = std::numeric_limits<std::size_t>::max())
+std::vector<uint32_t> greedyFmSampling(progressbar::Reporter& report, const RawFieldView<float>& data, float distance, float min, float max, std::size_t maxPoints = std::numeric_limits<std::size_t>::max())
 {
-    progressbar::Progressbar report = progressbar::Progressbar(progressbar::ProgressbarReportLevel::NoReport);
-
     // sort by magnitude of the data
     std::priority_queue<std::pair<float, uint64_t> > queue;
     // create FM with a observer which sets the bitfield
-    // TODO: instead of creating a new progressbar, we want to use the same (progressbar must be made smarter)
-    progressbar::Progressbar fm_report = progressbar::Progressbar(progressbar::ProgressbarReportLevel::NoReport);
-    auto fm = fastmarching::FastMarching<fastmarching::ObserverBitSet<mutil::HashMapMappingView<BigHashMap<uint64_t, float>>>>(fm_report);
+    auto fm = fastmarching::FastMarching<fastmarching::ObserverBitSet<mutil::HashMapMappingView<BigHashMap<uint64_t, float>>>>(report);
     fm.observer().resize(data.dims().size());
     fm.data(&data);
     fm.thresholds(min, max);
@@ -108,7 +104,7 @@ std::vector<uint32_t> greedyFmSampling(const RawFieldView<float>& data, float di
 
         if(points.size() % 128 == 0){
             report.update(fmt::format("Queue: ({:d})", queue.size()));
-            report.update(std::max((queue_max - queue.size()) / queue_max, points.size() / points_max));
+            // report.update(std::max((queue_max - queue.size()) / queue_max, points.size() / points_max));
         }
     }
     report.end();

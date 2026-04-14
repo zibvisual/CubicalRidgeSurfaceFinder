@@ -34,7 +34,7 @@ namespace fastmarching
     public:
         using MappingView = typename Observer::MappingView;
 
-        FastMarching(progressbar::Progressbar& report)
+        FastMarching(progressbar::Reporter& report)
             : m_min_threshold(std::numeric_limits<float>::lowest()), m_max_threshold(std::numeric_limits<float>::max()), m_handles(), m_heap(), m_potential(nullptr), m_max_time(0.0f), m_counter(0), m_report(report)
         {
         }
@@ -61,6 +61,7 @@ namespace fastmarching
             data_inner(pot);
         }
 
+        // Theses methods are too strict (they assume only binding data of timeData and distanceData)
         template <class T = Observer, class S = MappingView, std::enable_if_t<std::is_same_v<typename T::Distance, DistanceDisabled> && std::is_same_v<typename S::Ownership, mutil::Borrowed>, int> = 0>
         void
         data(const RawFieldView<float> *pot, MappingView timeData)
@@ -154,12 +155,18 @@ namespace fastmarching
 
         /**
          * @brief Add a seeding voxel. This has no side effect.
+         * 
+         * TODO: it is better to add points/gridlocations, as this is safer to use!
          *
          * @param startVoxel
          */
         void
         addStartVoxel(uint64_t startVoxel)
         {
+            // check if startVoxel is a valid starting point (m_potential) -> amigituos, only possible if startVoxel is FieldLocation of m_potential...
+            // if(!m_potential->get(startVoxel).has_value()){
+            //     throw std::invalid_argument("Given start voxel is out of bounds!");
+            // }
             m_observer.seed(startVoxel);
             m_handles[startVoxel] = m_heap.push(startVoxel);
         }
@@ -194,7 +201,18 @@ namespace fastmarching
         void
         addStartPoint(VecFloat startPoint)
         {
-            addStartVoxel(static_cast<uint64_t>(m_potential->createLocation(startPoint).index()));
+            auto loc = m_potential->lattice().gridLocation(startPoint);
+            //for now: clamp start point
+            // loc = loc.clamp(m_potential->lattice().dims());
+            // TODO: print start point -> clamping does not work as we allow one index to much? or gridNeighbors make mistakes...
+            // build/rsf /srv/public/nklenert/projects/vcbm/data/thermo/nrrd/24_MemBrain_seg_v10_beta.ckpt_segmented.transformed.DistField.nrrd --seed /srv/public/nklenert/projects/vcbm/data/thermo/landmarks/24_MemBrain_seg_v10_beta.ckpt_segmented.transformed.DistField.landmarkAscii --min 0.01 --max 100.0 --debug --center
+            // TODO: for now just filter all seed points such that they are not too close on the border (better results anyways...)
+            addStartVoxel(m_potential->lattice().c_index(loc));
+
+
+            // // check if start point is inside the volume
+            // if(m_potential->lattice().contains())
+            // addStartVoxel(static_cast<uint64_t>(m_potential->createLocation(startPoint).index()));
         }
 
         /**
@@ -362,10 +380,10 @@ namespace fastmarching
             auto dims = m_potential->getDims();
             uint64_t node;
 
+            
             // START ALGORITHM
             while (!m_heap.empty())
             {
-                
                 node = m_heap.top();
                 m_last_fixed_node = node;
                 m_heap.pop();
@@ -406,11 +424,9 @@ namespace fastmarching
                         //(we assume cost calculation to be more expensive than this check)
                         continue;
                     }
-
                     float new_cost = fastmarching::eikonal_view(*m_potential, neighbor, m_min_threshold, m_max_threshold, m_observer.time());
                     // std::cout << "DEBUG:  new cost: " << new_cost << std::endl;
                     // TODO: debug assert that new_cost > m_max_time
-
                     if (new_cost < time_neighbor)
                     {
                         //TODO: only use the voxels we alreay fixed -> where time <= new_cost
@@ -663,7 +679,7 @@ namespace fastmarching
         std::size_t m_counter;
 
         // Progressbar Report
-        progressbar::Progressbar& m_report;
+        progressbar::Reporter& m_report;
     };
 
 } // namespace fastmarching
