@@ -71,6 +71,10 @@ namespace fastmarching
         {
             return m_bitset;
         }
+        std::vector<bool>& bitset()
+        {
+            return m_bitset;
+        }
         
     private:
         MappingView m_time_data;

@@ -5,15 +5,19 @@
 #include <limits>
 #include <optional>
 #include <filesystem>
+
 #include <utils/Dims.hpp>
 #include <utils/BBox.hpp>
 #include <utils/Lattice.hpp>
 #include <utils/Vec.hpp>
 #include <utils/Direction.hpp>
+
 #include <io/npy.hpp>
 #include <io/metadata.hpp>
 #include <io/spatialinfo.hpp>
 #include <io/nrrd.hpp>
+
+#include <field/GridPositionIterator.hpp>
 
 /**
  * RawFieldView is a view into a contiguous dataset. The data is not owned by RawFieldView and is not freed by RawFieldView.
@@ -318,6 +322,11 @@ public:
         return m_data[location.z() * dims.x() * dims.y() + location.y() * dims.x() + location.x()];
     }
 
+    T get_unchecked(uint64_t index) const
+    {
+        return m_data[index];
+    }
+
     bool set(VecSize location, const T value)
     {
         if(m_lattice.dims().contains(location)){
@@ -382,6 +391,11 @@ public:
     T get_unchecked(FieldLocation location) const
     {
         return m_data[location.index()];
+    }
+
+    GridPositionIterator gridPositions() const
+    {
+        return GridPositionIterator(m_lattice.dims());
     }
 
 

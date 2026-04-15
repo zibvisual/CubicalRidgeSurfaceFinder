@@ -111,3 +111,137 @@ std::vector<uint32_t> greedyFmSampling(progressbar::Reporter& report, const RawF
 
     return points;
 }
+
+// Two things to improve:
+// - because of fm, most border points are not covered --> march a bit further with an inverse FM (which likes borders the most) OR with simple euclidean (a few more voxels in all directions)
+// - we only need to greedily take the local maximas. When turning off voxels, we can check the border, what new paths are possible.
+std::vector<uint32_t> greedySampling(progressbar::Reporter& report, const RawFieldView<float>& data, float distance, float min, float max, std::size_t maxPoints = std::numeric_limits<std::size_t>::max())
+{
+    const auto dims = data.getDims();
+
+    // create FM with a observer which sets the bitfield
+    auto fm = fastmarching::FastMarching<fastmarching::ObserverBitSet<mutil::HashMapMappingView<BigHashMap<uint64_t, float>>>>(report);
+    fm.observer().resize(data.dims().size());
+    fm.data(&data);
+    fm.thresholds(min, max);
+    fm.maxDistance(distance);
+
+    // take biggest maxima first
+    std::priority_queue<std::pair<float, uint64_t> > queue;
+
+    report.start("Searching for seed points");
+    // initialize the queue
+    for(auto gridPos : data.gridPositions())
+    {
+        // ugly, should be improved
+        const auto index = data.createLocation(gridPos).index();
+        const auto center = data.get_unchecked(index);
+        if(center < min){
+            continue;
+        }
+
+        if (gridPos[0] != 0 && center < data.get_unchecked(index - 1))
+        {
+            continue;
+        }
+        if (gridPos[0] + 1 != dims[0] && center < data.get_unchecked(index + 1))
+        {
+            continue;
+        }
+        if (gridPos[1] != 0 && center < data.get_unchecked(index - dims[0]))
+        {
+            continue;
+        }
+        if (gridPos[1] + 1 != dims[1] && center < data.get_unchecked(index + dims[0]))
+        {
+            continue;
+        }
+        if (gridPos[2] != 0 && center < data.get_unchecked(index - dims[0] * dims[1]))
+        {
+            continue;
+        }
+        if (gridPos[2] + 1 != dims[2]  && center < data.get_unchecked(index + dims[0] * dims[1]))
+        {
+            continue;
+        }
+
+        // gridPos is a locale maxima
+        queue.push({center, index});
+    }
+
+    const float queue_max = static_cast<float>(queue.size());
+    const float points_max = static_cast<float>(maxPoints);
+
+    // greedy algo
+    auto points = std::vector<uint32_t>();
+    while (!queue.empty() && points.size() < maxPoints)
+    {
+        std::pair<float, uint64_t> entry = queue.top();
+        queue.pop();
+        auto index = entry.second;
+
+        // skip if covered by another seed point
+        if(fm.observer().bitset()[index]){
+            continue;
+        }
+        
+        // set point and run fm
+        points.push_back(index);
+        fm.setStartVoxel(index);
+        fm.march();
+
+        // TODO: further expand bits by some neighborhood (done with border)
+
+        // check border for new locale maxima
+        for(auto border : fm.borderVoxels())
+        {
+            // skip if covered by another seed point
+            if(fm.observer().bitset()[border]){
+                continue;
+            }
+
+            // check for neigbhorhodd
+            const auto gridPos = data.lattice().gridLocationFromCIndex(border, data.lattice().dims());
+            const auto center = data.get_unchecked(border);
+            if(center < min){
+                continue;
+            }
+    
+            if (gridPos[0] != 0 && center < data.get_unchecked(border - 1))
+            {
+                continue;
+            }
+            if (gridPos[0] + 1 != dims[0] && center < data.get_unchecked(border + 1))
+            {
+                continue;
+            }
+            if (gridPos[1] != 0 && center < data.get_unchecked(border - dims[0]))
+            {
+                continue;
+            }
+            if (gridPos[1] + 1 != dims[1] && center < data.get_unchecked(border + dims[0]))
+            {
+                continue;
+            }
+            if (gridPos[2] != 0 && center < data.get_unchecked(border - dims[0] * dims[1]))
+            {
+                continue;
+            }
+            if (gridPos[2] + 1 != dims[2]  && center < data.get_unchecked(border + dims[0] * dims[1]))
+            {
+                continue;
+            }
+
+            // locale maxima found
+            queue.push({center, border});
+        }
+
+        if(points.size() % 128 == 0){
+            report.update(fmt::format("Queue: ({:d})", queue.size()));
+            // report.update(std::max((queue_max - queue.size()) / queue_max, points.size() / points_max));
+        }
+    }
+    report.end();
+
+    return points;
+}

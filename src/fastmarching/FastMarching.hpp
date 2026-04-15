@@ -6,6 +6,7 @@
 #include <utils/Mapping.hpp>
 #include <utils/HashMap.hpp>
 #include <utils/Utils.hpp>
+#include <utils/IteratorsToRange.hpp>
 #include <field/RawField.hpp>
 
 // // TODO: test which heap data structure is fastest
@@ -14,6 +15,13 @@
 
 namespace fastmarching
 {
+    // We use std::function<>, but this incurs a performance cost (indirection). CompareFunctors are faster.
+    // However boost::heap does not allow to change CompareFunctors -> const_cast from const to non-const necessary (see commit b7fad10265ec7928f4ed635c6a7a9fb203ea8cfc)
+    // Best Performance Option would be creating own heap (or using heap without being able to change nodes and just mutliply nodes by at most 6)
+    // DANGER: when changing heap such that multiples are allowed, the borderVoxels() method must be changed
+    typedef boost::heap::fibonacci_heap<uint64_t, boost::heap::compare<std::function<bool(const uint64_t &, const uint64_t &)>>> heap_type;
+
+
     /**
      * @brief
      *
@@ -539,15 +547,10 @@ namespace fastmarching
          *
          * @return std::vector<uint64_t>
          */
-        std::vector<uint64_t>
+        iter_pair<decltype(std::begin(std::declval<heap_type&>()))>
         borderVoxels() const
         {
-            auto vec = std::vector<uint64_t>();
-            for (auto pair : m_handles)
-            {
-                vec.push_back(pair.first);
-            }
-            return vec;
+            return {m_heap.begin(), m_heap.end()};
         }
 
         /**
@@ -663,10 +666,6 @@ namespace fastmarching
         float m_min_threshold;
         float m_max_threshold;
 
-        // We use std::function<>, but this incurs a performance cost (indirection). CompareFunctors are faster.
-        // However boost::heap does not allow to change CompareFunctors -> const_cast from const to non-const necessary (see commit b7fad10265ec7928f4ed635c6a7a9fb203ea8cfc)
-        // Best Performance Option would be creating own heap (or using heap without being able to change nodes and just mutliply nodes by at most 6)
-        typedef boost::heap::fibonacci_heap<uint64_t, boost::heap::compare<std::function<bool(const uint64_t &, const uint64_t &)>>> heap_type;
         std::unordered_map<uint64_t, heap_type::handle_type> m_handles;
         heap_type m_heap;
 

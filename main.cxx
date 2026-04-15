@@ -198,6 +198,8 @@ int main(int argc, char *argv[])
     }
 
     // load input
+    std::cout << "------------------------------------------------" << std::endl;
+    std::cout << "Load " << program.get("input") << std::endl;
     RawField<float> img;
     try
     {
@@ -208,6 +210,7 @@ int main(int argc, char *argv[])
         std::cerr << e.what() << '\n';
         return 1;
     }
+    std::cout << "Dims: " << img.dims() << std::endl;
 
     // load seeds (either labels or wavefront-like vertexset)
     std::vector<ridgesurface::Seed> seeds;
@@ -247,7 +250,7 @@ int main(int argc, char *argv[])
         std::vector<uint32_t> generated_seed_indices;
         if(program.is_used("--sample-greedy"))
         {
-            generated_seed_indices = greedyFmSampling(reporter, img.get_view(), program.get<float>("--sample-greedy"), min, max);
+            generated_seed_indices = greedySampling(reporter, img.get_view(), program.get<float>("--sample-greedy"), min, max);
         }else if(program.is_used("--sample-component"))
         {
             float threshold = program.get<float>("--sample-component");
@@ -417,6 +420,8 @@ int main(int argc, char *argv[])
                 }
             }
         }
+
+        std::cout << "Number of seeds actively used: " << m_finder.numOfSeeds() << std::endl;
         
         auto surf = surface::StaticSurface();
         m_finder.finalize(&surf);
