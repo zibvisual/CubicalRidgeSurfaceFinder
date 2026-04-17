@@ -237,6 +237,7 @@ namespace progressbar
             {
             case ProgressbarReportLevel::NoReport:
             case ProgressbarReportLevel::TimeReport:
+                break;
             case ProgressbarReportLevel::BusyReport:
             case ProgressbarReportLevel::FullReport:
             default:
