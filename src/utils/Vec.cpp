@@ -128,6 +128,16 @@ const VecInt VecInt::BACKWARD = {0, 0, 1};
 const VecSize VecSize::MIN = {0, 0, 0};
 const VecSize VecSize::MAX = {std::numeric_limits<std::size_t>::max(), std::numeric_limits<std::size_t>::max(), std::numeric_limits<std::size_t>::max()};
 
+std::size_t VecSize::min() const
+{
+    return std::min(m_values[0], std::min(m_values[1], m_values[2]));
+}
+
+std::size_t VecSize::max() const
+{
+    return std::max(m_values[0], std::max(m_values[1], m_values[2]));
+}
+
 VecSize VecSize::min(std::size_t min) const{
     return VecSize(
         std::min(m_values[0], min),

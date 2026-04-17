@@ -89,6 +89,10 @@ public:
     inline std::size_t y() const {return m_values[1];}
     inline std::size_t z() const {return m_values[2];}
 
+    /** Return the minimal component value */
+    std::size_t min() const;
+    std::size_t max() const;
+
     VecSize min(std::size_t min) const;
     VecSize max(std::size_t max) const;
     VecSize clamp(std::size_t min, std::size_t max) const;

@@ -81,7 +81,8 @@ public:
         return m_view;
     }
 
-    void save(std::filesystem::path output_path){
+    void save(std::filesystem::path output_path) const 
+    {
         m_view.save(output_path);
     }
 
@@ -391,6 +392,12 @@ public:
 
     void setVoxelSize(VecFloat voxelsize){
         m_view.setVoxelSize(voxelsize);
+    }
+
+    // Currently only compares values, not spatial information
+    bool operator==(const RawField<T>& rhs) const
+    {
+        return m_data == rhs.m_data;
     }
 
 private:

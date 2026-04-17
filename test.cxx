@@ -27,6 +27,7 @@
 #include <io/vertexset.hpp>
 
 #include <rsf/Amanatides.hpp>
+#include <field/GridPositionBorderIterator.hpp>
 
 #include <iostream>
 
@@ -532,6 +533,36 @@ TEST_CASE("Extension of image", "[rsf]")
     }
 }
 
+TEST_CASE("BorderIterator of Image", "[rsf]")
+{
+    auto field = RawField<float>(Dims(5,6,7));
+    field.fill(1.0f);
+    auto iter = GridPositionBorderIterator(field.dims(), 2);
+    REQUIRE(iter.thickness() == 2);
+    for(auto pair : iter)
+    {
+        field.set(pair.first, pair.second);
+    }
+
+    auto expect = RawField<float>(field.dims());
+    expect.fill(1.0f);
+    for(auto pos : GridPositionIterator(field.dims()))
+    {
+        auto min = pos.min();
+        auto max = (static_cast<VecInt>(field.dims()) - static_cast<VecInt>(pos)).min() - 1;
+        if(min == 0 || max == 0)
+        {
+            expect.set(pos, 0.0f);
+        }else if (min == 1 || max == 1)
+        {
+            expect.set(pos, 0.5f);
+        }
+    }
+    field.save(__DATAPATH__+"/output/fade_out_field.nrrd");
+    expect.save(__DATAPATH__+"/output/fade_out_field_expect.nrrd");
+    REQUIRE(field == expect);
+}
+
 TEST_CASE("BitFace", "[face]"){
     const auto face1 = BitFace(VecSize(1,2,3), Direction::UP);
     REQUIRE(face1.toIndex() == 0x2000030000200001);
@@ -552,7 +583,7 @@ TEST_CASE("VoxelTracer", "[voxel]"){
         field.set(pos, counter);
         counter += 1.0f;
     }
-    field.save(__DATAPATH__+"/output/voxeltracer.nrrd");
+    // field.save(__DATAPATH__+"/output/voxeltracer.nrrd");
     REQUIRE(field.get(VecSize(1,5,5)).value() == 1.0f);
     REQUIRE(field.get(VecSize(6,5,5)).value() == 6.0f);
     REQUIRE(field.get(VecSize(6,6,5)).value() == 7.0f);

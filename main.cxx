@@ -20,6 +20,8 @@
 #include <utils/SeedSampler.hpp>
 #include <utils/StructureTensor.hpp>
 
+#include <field/GridPositionBorderIterator.hpp>
+
 #include <filesystem>
 #include <vector>
 #include <variant>
@@ -287,14 +289,23 @@ int main(int argc, char *argv[])
         }
     }
 
-    // extend image TODO: do that AFTER shifting.... --> better(?): include border-margin?!
+    // extend image
     Dims originalDims = img.lattice().dims();
     if(program.is_used("--border-padding")){
-        std::cout << "Extend image by " << program.get<int>("--border-padding") << " voxels" << std::endl;
-        img = img.extend(program.get<int>("--border-padding"));
+        int padding = program.get<int>("--border-padding");
+        std::cout << "Extend image by " << padding << " voxels" << std::endl;
+        img = img.extend(padding);
+        // fade out image
+        for(auto pair : GridPositionBorderIterator(img.dims(), padding))
+        {
+            auto val = img.get_unchecked(pair.first);
+            img.set_unchecked(pair.first, val * pair.second);
+        }
+
         if(debug){
             img.save(debug_path / input_name.stem() / input_name.stem().concat("_rsf_extendedField.nrrd"));
         }
+
     }
 
     // run
