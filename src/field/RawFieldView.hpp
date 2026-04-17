@@ -126,7 +126,7 @@ public:
     {
     }
 
-    void save(std::filesystem::path output)
+    void save(std::filesystem::path output) const
     {
         // check extension
         if(!output.has_extension()){
@@ -141,7 +141,8 @@ public:
         throw std::invalid_argument("Extension not supported");
     }
 
-    void save_nrrd(std::filesystem::path output){
+    void save_nrrd(std::filesystem::path output) const
+    {
         nrrd::nrrd_data<T> data;
         data.lattice = m_lattice;
         for(std::size_t i = 0; i < m_lattice.size(); ++i)
@@ -153,7 +154,8 @@ public:
         nrrd::write_nrrd(stream, data);
     }
 
-    void save_npy(std::filesystem::path output){
+    void save_npy(std::filesystem::path output) const
+    {
         npy::npy_data_ptr<T> data;
         data.data_ptr = this->data();
         data.shape = npy::shape_t(m_lattice.dims()[0], m_lattice.dims()[1], m_lattice.dims()[2]);

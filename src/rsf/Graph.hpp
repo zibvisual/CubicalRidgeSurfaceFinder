@@ -210,6 +210,12 @@ namespace klenert
             m_edges[first].erase(second);
         }
 
+        void
+        setEdge(uint64_t first, uint64_t second, E payload)
+        {
+            m_edges[first][second] = payload;
+        }
+
         /**
          * Filte all edges with a predicate.
          */
@@ -298,7 +304,7 @@ namespace klenert
         bool
         hasEdge(std::size_t from, std::size_t to) const
         {
-            return m_edges.contains(from) && m_edges[from].contains(to);
+            return m_edges.contains(from) && m_edges.at(from).contains(to);
         }
 
         std::optional<E>

@@ -174,6 +174,14 @@ namespace ridgesurface
 
         void finalize_neighborhood_graph();
 
+
+        // --------------     experimental methods ----------------
+        // create neighbors graph (without specific orientation) by looking at cum_labels and look at touching labels with a specific speed threshold
+        void initialize_neighbors();
+        void orient_neighbors();
+        // --------------   end experimental methods ----------------
+
+
         // calculations done by calculate
 
         /**
@@ -225,6 +233,10 @@ namespace ridgesurface
         std::unordered_set<int64_t> m_patch;
         int64_t m_first_grid_point;
         int64_t m_second_grid_point;
+
+        // TODO: save m_label_view as a bit hashmap for ALL patches --> like m_cum_label but allow overlap?! (still sparse in some sense)
+        // for now: do not care about performance
+        std::unordered_map<uint64_t, SmallHashMap<int64_t, unsigned char>> m_labels;
 
         // optional memory where data is saved (TODO: refactor, such that we have temporary memory itself as objects which then can get copied if necessary -> problematic as we use closures right now)
         std::unordered_map<Face, std::size_t>* ts_sphere_coloring;

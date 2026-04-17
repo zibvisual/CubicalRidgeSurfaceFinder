@@ -2,6 +2,7 @@
 #include <utils/Vec.hpp>
 #include <utils/Dims.hpp>
 #include <io/vertexset.hpp>
+#include <field/CLocationPairScanner.hpp>
 
 #include "Flooding.hpp"
 #include "Amanatides.hpp"
@@ -511,6 +512,10 @@ namespace ridgesurface
         auto labels = RawField<uint16_t>(m_lattice);
         castToLabels(labels.data());
         labels.save(op + "labels.nrrd");
+
+        // time
+        m_cum_time.save(op + "time.nrrd");
+        m_cum_distance.save(op + "distance.nrrd");
     }
 
     // void
@@ -715,7 +720,7 @@ namespace ridgesurface
             }
         }
         // graphs
-        m_graph.removeNode(id);
+        // m_graph.removeNode(id);
         // voxel list
         m_seeds_voxels.erase(id);
         // candidates
@@ -758,7 +763,7 @@ namespace ridgesurface
             ++counter;
             m_progressbar.update(fmt::format("Calculate Patches ({:d} / {:d})", counter, size), counter/static_cast<float>(size));
         }
-        update_patch_orientations();
+        // update_patch_orientations();
         m_progressbar.end();
         return m_surface_update.build();
     }
@@ -782,8 +787,8 @@ namespace ridgesurface
                 while (!stack.empty())
                 {
                     auto current = stack.back();
-                    bool current_orientation = orientations[current];
                     stack.pop_back();
+                    bool current_orientation = orientations[current];
                     // check all neighbors
                     for (auto edge : m_graph.neighbors(current))
                     {
@@ -865,7 +870,7 @@ namespace ridgesurface
             if (m_progressbar.stop_and_end()) return m_surface_update.build();
             m_progressbar.update(fmt::format("Calculating Patches ({:d} / {:d})", counter, m_seeds.size()), static_cast<float>(counter) / m_seeds.size());
         }
-        update_patch_orientations();
+        // update_patch_orientations();
         m_progressbar.end();
         return m_surface_update.build();
     }
@@ -884,14 +889,14 @@ namespace ridgesurface
         // if(seed1 == seed2){
         //     return (m_cum_label[i] % 2) != (m_cum_label[j] % 2);
         // }
-        auto polarity = m_graph.getEdge(seed1, seed2);
+
+        const auto polarity = m_graph.getEdge(seed1, seed2);
         if (!polarity)
         {
-            // if it is no neighbor, we do not generate any faces
+            // if it is no neighbor, we do not generate any faces (this might create some small holes when two patches just barely touch)
             return false;
         }
-        auto border = ((m_cum_label.data()[i] % 2) != (m_cum_label.data()[j] % 2)) ^ polarity.value();
-        return border;
+        return ((m_cum_label.data()[i] % 2) != (m_cum_label.data()[j] % 2)) ^ polarity.value();
     }
 
     void
@@ -900,6 +905,9 @@ namespace ridgesurface
         m_progressbar.start("Finalizing Surface");
         surface->clear();
         // graph->clear();
+        initialize_neighbors();
+        orient_neighbors();
+        update_patch_orientations();
 
         // not needed for Surface Finder. Only reduces the amount of intersection in the graph.
         // finalize_neighborhood_graph();
@@ -909,81 +917,58 @@ namespace ridgesurface
         const auto dims = m_lattice.dims();
 
         // x direction
-        for (std::size_t z = 0; z < dims[2]; ++z)
+        for(auto pair : field::CLocationPairScannerX(m_lattice.dims()))
         {
-            for (std::size_t y = 0; y < dims[1]; ++y)
+            auto i = pair.first;
+            auto j = pair.second;
+            if (faceBetweenVoxels(i, j))
             {
-                for (std::size_t x = 0; x < dims[0] - 1; ++x)
+                auto orientation = m_patch_orientation[label_to_seed(m_cum_label.data()[i])];
+                if ((m_cum_label.data()[i] % 2 == 1) ^ orientation)
                 {
-                    std::size_t index = m_lattice.c_index(VecSize(x,y,z));
-                    if (faceBetweenVoxels(index, index + 1))
-                    {
-                        // auto firstSeed = label_to_seed(m_cum_label[index]);
-                        // auto secondSeed = label_to_seed(m_cum_label[index + 1]);
-                        // if (firstSeed != secondSeed)
-                        // {
-                        //     graph->addEdge(firstSeed, secondSeed);
-                        // }
-                        auto orientation = m_patch_orientation[label_to_seed(m_cum_label.data()[index])];
-                        if ((m_cum_label.data()[index] % 2 == 1) ^ orientation)
-                        {
-                            faces.insert(Face(index, Direction::RIGHT));
-                        }
-                        else
-                        {
-                            faces.insert(Face(index + 1, Direction::LEFT));
-                        }
-                    }
+                    faces.insert(Face(i, Direction::RIGHT));
+                }
+                else
+                {
+                    faces.insert(Face(j, Direction::LEFT));
                 }
             }
         }
 
         // y direction
-        for (std::size_t z = 0; z < dims[2]; ++z)
+        for(auto pair : field::CLocationPairScannerY(m_lattice.dims()))
         {
-            for (std::size_t y = 0; y < dims[1] - 1; ++y)
+            auto i = pair.first;
+            auto j = pair.second;
+            if (faceBetweenVoxels(i, j))
             {
-                for (std::size_t x = 0; x < dims[0]; ++x)
+                auto orientation = m_patch_orientation[label_to_seed(m_cum_label.data()[i])];
+                if ((m_cum_label.data()[i] % 2 == 1) ^ orientation)
                 {
-                    std::size_t i = m_lattice.c_index(VecSize(x,y,z));
-                    std::size_t j = i + dims[0];
-                    if (faceBetweenVoxels(i, j))
-                    {
-                        auto orientation = m_patch_orientation[label_to_seed(m_cum_label.data()[i])];
-                        if ((m_cum_label.data()[i] % 2 == 1) ^ orientation)
-                        {
-                            faces.insert(Face(i, Direction::UP));
-                        }
-                        else
-                        {
-                            faces.insert(Face(j, Direction::DOWN));
-                        }
-                    }
+                    faces.insert(Face(i, Direction::UP));
+                }
+                else
+                {
+                    faces.insert(Face(j, Direction::DOWN));
                 }
             }
         }
 
         // z direction
-        for (std::size_t z = 0; z < dims[2] - 1; ++z)
+        for(auto pair : field::CLocationPairScannerZ(m_lattice.dims()))
         {
-            for (std::size_t y = 0; y < dims[1]; ++y)
+            auto i = pair.first;
+            auto j = pair.second;
+            if (faceBetweenVoxels(i, j))
             {
-                for (std::size_t x = 0; x < dims[0]; ++x)
+                auto orientation = m_patch_orientation[label_to_seed(m_cum_label.data()[i])];
+                if ((m_cum_label.data()[i] % 2 == 1) ^ orientation)
                 {
-                    std::size_t i = m_lattice.c_index(VecSize(x,y,z));
-                    std::size_t j = i + dims[0] * dims[1];
-                    if (faceBetweenVoxels(i, j))
-                    {
-                        auto orientation = m_patch_orientation[label_to_seed(m_cum_label.data()[i])];
-                        if ((m_cum_label.data()[i] % 2 == 1) ^ orientation)
-                        {
-                            faces.insert(Face(i, Direction::FORWARD));
-                        }
-                        else
-                        {
-                            faces.insert(Face(j, Direction::BACKWARD));
-                        }
-                    }
+                    faces.insert(Face(i, Direction::FORWARD));
+                }
+                else
+                {
+                    faces.insert(Face(j, Direction::BACKWARD));
                 }
             }
         }
@@ -1017,12 +1002,12 @@ namespace ridgesurface
     void
     CubicalRidgeSurfaceFinder::merge(uint64_t id)
     {
-        // For all neighbors, we calculate the correspondence of their labels to the current labels and save that
-        auto neighbors = std::unordered_map<uint64_t, int>();
-        initialize_possible_neighbors(neighbors);
-        track_neighbor_correspondence_by_volume(neighbors);
         merge_cum_fields(id);
-        update_neighbor_graph(id, neighbors);
+        // For all neighbors, we calculate the correspondence of their labels to the current labels and save that
+        // auto neighbors = std::unordered_map<uint64_t, int>();
+        // initialize_possible_neighbors(neighbors);
+        // track_neighbor_correspondence_by_volume(neighbors);
+        // update_neighbor_graph(id, neighbors);
         // update_neighbor_graph_better(i); -> this did not work...find out why?
     }
 
@@ -1063,6 +1048,88 @@ namespace ridgesurface
             if (static_cast<float>(seed.second) >= static_cast<float>(m_patch.size()) * 0.01)
             {
                 neighbors.insert({ seed.first, 0 });
+            }
+        }
+    }
+
+    void CubicalRidgeSurfaceFinder::initialize_neighbors()
+    {
+        m_graph.clear();
+
+        // create all nodes in the graph
+        for(auto seed : m_seeds){
+            m_graph.addNode(seed.first);
+            m_graph.addEdge(seed.first, seed.first, false);
+        }
+
+        // go through all voxels and check which are neighbors
+        for(auto pair : field::CLocationPairScanner(m_lattice.dims()))
+        {
+            auto label1 = m_cum_label.data()[pair.first];
+            auto label2 = m_cum_label.data()[pair.second];
+
+            if(label1 == 0 || label2 == 0)
+            {
+                continue;
+            }
+
+            auto seed1 = label_to_seed(label1);
+            auto seed2 = label_to_seed(label2);
+
+            if(seed1 == seed2 || m_graph.hasEdge(seed1, seed2))
+            {
+                continue;
+            }
+
+            // calculate average speed (we might want to normalize it)
+            const float speed_threshold = 0.01;
+            auto time1 = m_cum_time.data()[pair.first];
+            auto time2 = m_cum_time.data()[pair.second];
+            auto distance1 = m_cum_distance.data()[pair.first];
+            auto distance2 = m_cum_distance.data()[pair.second];
+            if(time1 < 0.0001 || time2 < 0.0001){
+                m_graph.addEdge(seed1, seed2, false);
+                m_graph.addEdge(seed2, seed1, false);
+            }
+            float speed1 = distance1 / time1;
+            float speed2 = distance2 / time2;
+            if(speed1 > speed_threshold || speed2 > speed_threshold)
+            {
+                m_graph.addEdge(seed1, seed2, false);
+                m_graph.addEdge(seed2, seed1, false);
+            }
+        }
+    }
+
+    void
+    CubicalRidgeSurfaceFinder::orient_neighbors()
+    {
+        std::unordered_map<uint64_t, int64_t> counter;
+        for(auto seed1 : m_seeds){
+            const auto id1 = seed1.first;
+            counter.clear();
+            for(auto seed2 : m_seeds){
+                const auto id2 = seed2.first;
+                // only check for neighboring seeds
+                if(!m_graph.hasEdge(id1, id2)){
+                    continue;
+                }
+
+                // check overlap from seed1 and seed2
+                for(auto pair : m_labels.at(id1)){
+                    const auto index = pair.first;
+                    const auto label1 = pair.second;
+                    if(!m_labels.at(id2).contains(index)){
+                        continue;
+                    }
+                    const auto label2 = m_labels.at(id2).at(index);
+                    counter[id2] += ((label1 & 1) == (label2 & 1)) ? 1 : -1;
+                }
+            }
+            for (auto pair : counter)
+            {
+                m_graph.setEdge(pair.first, id1, pair.second < 0);
+                m_graph.setEdge(id1, pair.first, pair.second < 0);
             }
         }
     }
@@ -1291,7 +1358,7 @@ namespace ridgesurface
     {
         const auto& time_view = m_fm.time();
         const auto& distance_view = m_fm.distance();
-        // merge fields depending on time and orientation
+        // merge fields depending on time
         for (auto pair : m_label_view.inner())
         {
             auto index = pair.first;
@@ -1302,6 +1369,8 @@ namespace ridgesurface
             m_cum_distance.data()[index] = time < m_cum_time.data()[index] ? distance_view.get(index) : m_cum_distance.data()[index];
             m_cum_time.data()[index] = time < m_cum_time.data()[index] ? time : m_cum_time.data()[index];
         }
+        // copy all labels
+        m_labels[id] = m_label_view.inner();
     }
 
     void
