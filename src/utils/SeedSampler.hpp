@@ -136,7 +136,7 @@ std::vector<uint32_t> greedySampling(progressbar::Reporter& report, const RawFie
         // ugly, should be improved
         const auto index = data.createLocation(gridPos).index();
         const auto center = data.get_unchecked(index);
-        if(center < min){
+        if(center <= min){
             continue;
         }
 
@@ -203,7 +203,7 @@ std::vector<uint32_t> greedySampling(progressbar::Reporter& report, const RawFie
             // check for neigbhorhodd
             const auto gridPos = data.lattice().gridLocationFromCIndex(border, data.lattice().dims());
             const auto center = data.get_unchecked(border);
-            if(center < min){
+            if(center <= min){
                 continue;
             }
     
