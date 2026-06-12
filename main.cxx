@@ -97,22 +97,24 @@ int main(int argc, char *argv[])
     argparse::ArgumentParser program("Ridge Surface Finder", std::to_string(RidgeSurfaceFinder_VERSION_MAJOR) + "." + std::to_string(RidgeSurfaceFinder_VERSION_MINOR));
     program.add_argument("input").help("Input file to load");
 
+    // Implicit values do not work if the argument is optional
+
     // seeds
     auto& input = program.add_mutually_exclusive_group(true);
     input.add_argument("-s", "--seed").help("Label field or vertex set");
-    input.add_argument("--sample-component").default_value(0.01f).scan<'g', float>().help("Generate one seed point per component (threshold creates mask). Useful with --automatic");
-    input.add_argument("--sample-greedy").default_value(40.0f).scan<'g', float>().help("Generate many seedpoint via FM, given by radius.");
+    input.add_argument("--sample-component").nargs(0,1).scan<'g', float>().help("Generate one seed point per component (threshold creates mask). Useful with --automatic. [implicit: min of image]");
+    input.add_argument("--sample-greedy").nargs(0,1).scan<'g', float>().help("Generate many seedpoint with exclusion zone dependent on fast marching range and given multiplicative. [implicit: 0.8]");
 
     // fm settings
-    program.add_argument("--min").default_value(0.f).scan<'g', float>().help("Min threshold. Everything under is not touched.");
-    program.add_argument("--max").default_value(1.2f).scan<'g', float>().help("Max threshold. Everything above or equal has no cost.");
+    program.add_argument("--min").scan<'g', float>().help("Min threshold. Everything under is not touched. [default: min of image]");
+    program.add_argument("--max").scan<'g', float>().help("Max threshold. Everything above or equal has no cost. [default: max of image * 1.2]");
     program.add_argument("--range").default_value(50.0f).scan<'g', float>().help("How far each seedpoint should be marched for");
     
     // processing
     program.add_argument("-a", "--automatic").nargs(1,2).help("Adds more seed points: (min-distance-between-points, [max seedpoints])");
-    program.add_argument("--border-margin").default_value(0.1f).scan<'g', float>().help("Threshold when to skip given seed points. Value between 0 and 1.");
-    program.add_argument("--shift").nargs(0,1).scan<'g', float>().help("Distance how far a seed point is allowed to shift to go to the ridge.");
-    program.add_argument("--border-padding").nargs(0,1).scan<'i', int>().help("How much the image should be extended. Given by voxel number.");
+    program.add_argument("--border-margin").nargs(0,1).scan<'g', float>().help("Threshold when to skip given seed points. Value between 0 and 1. [implicit: 0.1]");
+    program.add_argument("--shift").nargs(0,1).scan<'g', float>().help("Distance how far a seed point is allowed to shift to go to the ridge. [implicit: --range * 0.1]");
+    program.add_argument("--border-padding").nargs(0,1).scan<'i', int>().help("How much the image should be extended. Given by voxel number. [implicit: 10]");
 
     // spatial information
     auto &centering = program.add_mutually_exclusive_group();
@@ -142,17 +144,11 @@ int main(int argc, char *argv[])
 
     auto time_begin = std::chrono::steady_clock::now();
     auto reporter = progressbar::Reporter();
+    std::filesystem::path input_name = program.get("input");
     // reporter.start("CRSF");
 
-    std::filesystem::path input_name = program.get("input");
-    auto debug_setting = flatten_arg(program, "-d", "debug");
-    bool debug = debug_setting.has_value();
-    std::filesystem::path debug_path = debug_setting.value_or("debug");
-
-    const auto min = program.get<float>("--min");
-    const auto max = program.get<float>("--max");
-
     // Arguments
+    // TODO: use merge method of spatial arguments
     auto args = SpatialArguments();
     if(program.is_used("--bbox")){
         std::vector<float> vals = program.get<std::vector<float>>("--bbox");
@@ -201,12 +197,12 @@ int main(int argc, char *argv[])
 
     // load input
     std::cout << "------------------------------------------------" << std::endl;
-    std::cout << "Load " << program.get("input") << std::endl;
+    std::cout << "Load " << input_name << std::endl;
     RawField<float> img;
     try
     {
         // TODO: check if nrrd values were float/double. If it could be labels, we should warn the user!
-        img = RawField<float>::load(program.get("input"), args);
+        img = RawField<float>::load(input_name, args);
     }
     catch (const std::exception &e)
     {
@@ -215,62 +211,50 @@ int main(int argc, char *argv[])
     }
     std::cout << "Dims: " << img.dims() << std::endl;
 
-    // load seeds (either labels or wavefront-like vertexset)
-    std::vector<ridgesurface::Seed> seeds;
-    if(program.is_used("--seed")){
-        try {
-            // vertexset
-            auto vertexset = read_vertexset(program.get("--seed"), program.get<float>("--range"));
-            for(std::size_t i = 0; i < vertexset.points.size(); ++i){
-                auto point = vertexset.points[i];
-                seeds.push_back(ridgesurface::Seed(ridgesurface::SeedPoint(VecFloat(point.x(), point.y(), point.z())), vertexset.data[i]));
-            }
-            std::cout << "Loaded " << seeds.size() << " seeds from vertexset " << program.get("--seed") << std::endl;
-        }
-        catch (const std::exception &err) {
-            // try labels
-            try {
-                auto labels = RawField<uint8_t>::load(program.get("--seed"));
-                // generate seeds from voxels
-                for(std::size_t i = 0; i < labels.lattice().size(); ++i){
-                    if(labels.get(RawField<uint8_t>::FieldLocation(i)) == 0){
-                        seeds.push_back(ridgesurface::Seed(ridgesurface::SeedPoint(static_cast<VecFloat>(Lattice::gridLocationFromCIndex(i, labels.dims()))), program.get<float>("--range")));
-                    }
-                }
-                std::cout << "Loaded " << seeds.size() << " seeds from label field " << program.get("--seed") << std::endl;
-            }
-            catch (const std::exception &err) {
-                std::cerr << "Neither paths to wavefront object nor numpy labels found." << std::endl;
-                return 1;
-            }
-        }
+    // Get min and max of image
+    const auto img_min_max = img.min_max();
+    const auto img_min = img_min_max.first;
+    const auto img_max = img_min_max.second;
+
+    // Settings:
+    auto debug_setting = flatten_arg(program, "--debug", "debug");
+    bool debug = debug_setting.has_value();
+    std::filesystem::path debug_path = debug_setting.value_or("debug");
+    if(debug){
+        std::cout << "Debug activated with files saved at " << debug_path << std::endl;
     }
 
-    // generate seeds
-    if(program.is_used("--sample-greedy") || program.is_used("--sample-component"))
-    {
-        std::cout << "Generate seeds" << std::endl;
-        std::vector<uint32_t> generated_seed_indices;
-        if(program.is_used("--sample-greedy"))
-        {
-            generated_seed_indices = greedySampling(reporter, img.get_view(), program.get<float>("--sample-greedy"), min, max);
-        }else if(program.is_used("--sample-component"))
-        {
-            float threshold = program.get<float>("--sample-component");
-            generated_seed_indices = sample(img.data(), img.dims(), threshold);
-        }
-    
-        for (std::size_t i = 0; i < generated_seed_indices.size(); ++i) {
-            VecSize gridLoc = Lattice::gridLocationFromCIndex(generated_seed_indices[i], img.dims());
-            VecFloat worldPos = img.lattice().worldPosition(gridLoc);
-            seeds.push_back(ridgesurface::Seed(ridgesurface::SeedPoint(VecFloat(worldPos.x(), worldPos.y(), worldPos.z())), program.get<float>("--range")));   
-        }
-        generated_seed_indices.clear();
-        std::cout << "Generated " << seeds.size() << " seeds" << std::endl;
+    const auto fm_range = program.get<float>("--range");
+    std::cout << "FM range: " << fm_range << std::endl;
 
-        if(debug){
-            saveSeeds(debug_path / input_name.stem() / input_name.stem().concat("_rsf_generatedSeeds.obj"), seeds);
-        }
+    const auto min = program.present<float>("--min").value_or(img_min);
+    const auto max = program.present<float>("--max").value_or(img_max * 1.2f);
+    std::cout << "Cost intensity range for marching set to [" << min << ", " << max << "]" << std::endl;
+
+    const auto sample_component = flatten_arg(program, "--sample-component", min);
+    const auto sample_greedy = flatten_arg(program, "--sample-greedy", 0.8f);
+    if(sample_component){
+        std::cout << "seed generation with threshold " << sample_component.value() << std::endl;
+    }
+    if(sample_greedy){
+        std::cout << "seed generation with voxel range of " << (sample_greedy.value() * fm_range) << std::endl;
+    }
+
+    const float default_shift_distance = fm_range * 0.1 * img.getVoxelSize().length();
+    const std::optional<float> shift_distance_voxels = flatten_arg<float>(program, "--shift", fm_range * 0.1);
+    if(shift_distance_voxels){
+        std::cout << "seed shifting distance of up to " << shift_distance_voxels.value() << " voxels" << std::endl;
+    }
+    const auto shift_distance = shift_distance_voxels ? std::optional<float>(shift_distance_voxels.value() * img.getVoxelSize().length()) : std::nullopt;
+
+    const std::optional<int> border_padding = flatten_arg(program, "--border-padding", 10);
+    if(border_padding){
+        std::cout << "border padding of " << border_padding.value() << std::endl;
+    }
+
+    const auto border_margin = flatten_arg(program, "--border-margin", 0.1f);
+    if(border_margin){
+        std::cout << "border margin of " << border_margin.value() << std::endl;
     }
 
     // automatic values
@@ -290,14 +274,73 @@ int main(int argc, char *argv[])
         }
     }
 
+
+
+
+    // load seeds (either labels or wavefront-like vertexset)
+    std::vector<ridgesurface::Seed> seeds;
+    if(program.is_used("--seed")){
+        try {
+            // vertexset
+            auto vertexset = read_vertexset(program.get("--seed"), fm_range);
+            for(std::size_t i = 0; i < vertexset.points.size(); ++i){
+                auto point = vertexset.points[i];
+                seeds.push_back(ridgesurface::Seed(ridgesurface::SeedPoint(VecFloat(point.x(), point.y(), point.z())), vertexset.data[i]));
+            }
+            std::cout << "Loaded " << seeds.size() << " seeds from vertexset " << program.get("--seed") << std::endl;
+        }
+        catch (const std::exception &err) {
+            // try labels
+            try {
+                auto labels = RawField<uint8_t>::load(program.get("--seed"));
+                // generate seeds from voxels
+                for(std::size_t i = 0; i < labels.lattice().size(); ++i){
+                    if(labels.get(RawField<uint8_t>::FieldLocation(i)) == 0){
+                        seeds.push_back(ridgesurface::Seed(ridgesurface::SeedPoint(static_cast<VecFloat>(Lattice::gridLocationFromCIndex(i, labels.dims()))), fm_range));
+                    }
+                }
+                std::cout << "Loaded " << seeds.size() << " seeds from label field " << program.get("--seed") << std::endl;
+            }
+            catch (const std::exception &err) {
+                std::cerr << "Neither paths to wavefront object nor numpy labels found." << std::endl;
+                return 1;
+            }
+        }
+    }
+
+    // generate seeds
+    if(sample_greedy || sample_component)
+    {
+        std::cout << "Generate seeds" << std::endl;
+        std::vector<uint32_t> generated_seed_indices;
+        if(sample_greedy)
+        {
+            generated_seed_indices = greedySampling(reporter, img.get_view(), sample_greedy.value() * fm_range, min, max);
+        }else if(sample_component)
+        {
+            generated_seed_indices = sample(img.data(), img.dims(), sample_component.value());
+        }
+    
+        for (std::size_t i = 0; i < generated_seed_indices.size(); ++i) {
+            VecSize gridLoc = Lattice::gridLocationFromCIndex(generated_seed_indices[i], img.dims());
+            VecFloat worldPos = img.lattice().worldPosition(gridLoc);
+            seeds.push_back(ridgesurface::Seed(ridgesurface::SeedPoint(VecFloat(worldPos.x(), worldPos.y(), worldPos.z())), fm_range));   
+        }
+        generated_seed_indices.clear();
+        std::cout << "Generated " << seeds.size() << " seeds" << std::endl;
+
+        if(debug){
+            saveSeeds(debug_path / input_name.stem() / input_name.stem().concat("_rsf_generatedSeeds.obj"), seeds);
+        }
+    }
+
     // extend image
     Dims originalDims = img.lattice().dims();
-    if(program.is_used("--border-padding")){
-        int padding = program.get<int>("--border-padding");
-        std::cout << "Extend image by " << padding << " voxels" << std::endl;
-        img = img.extend(padding);
+    if(border_padding){
+        std::cout << "Extend image by " << border_padding.value() << " voxels" << std::endl;
+        img = img.extend(border_padding.value());
         // fade out image
-        for(auto pair : GridPositionBorderIterator(img.dims(), padding))
+        for(auto pair : GridPositionBorderIterator(img.dims(), border_padding.value()))
         {
             auto val = img.get_unchecked(pair.first);
             img.set_unchecked(pair.first, val * pair.second);
@@ -322,25 +365,18 @@ int main(int argc, char *argv[])
             std::cout << "Warning: Voxelsizes are assumed to be equal in all axis for the algorithms. Results might not be satisfactory." << std::endl;
         }
 
-        std::cout << "Cost intensity range for marching set to [" << min << ", " << max << "]" << std::endl;
-
         ridgesurface::CubicalRidgeSurfaceFinder m_finder(reporter);
         m_finder.setInput(&img.get_view());
         m_finder.setThresholds(min,max);
-        if(program.is_used("--border-padding")){
-            VecSize min_clip = VecSize(program.get<int>("--border-padding"));
+        if(border_padding){
+            VecSize min_clip = VecSize(border_padding.value());
             VecSize max_clip = static_cast<VecSize>(originalDims) + min_clip;
             m_finder.getTransformer().setClipping(min_clip, max_clip);
-        }        
-
-        const float default_shift_distance = program.get<float>("--range") * 0.1;
-        const std::optional<float> shift_distance = flatten_arg<float>(program, "shift", default_shift_distance);
+        }
 
         // shift seeds
         if(shift_distance){
-            const float shift_distance_val = shift_distance.value() * img.getVoxelSize().length();
-
-            std::cout << "Shift seeds by a maximum of " << shift_distance_val  << " distance" << std::endl;
+            std::cout << "Shift seeds by a maximum of " << shift_distance.value()  << " distance" << std::endl;
             if(debug){
                 // record structure tensor vector via lineset
                 auto builder = LineSetBuilder<std::monostate>();
@@ -365,7 +401,7 @@ int main(int argc, char *argv[])
 
                 for(auto& seed: seeds){
                     builder2.add_point(seed.firstPoint(), 0);
-                    m_finder.moveSeedToRidge(seed, shift_distance_val);
+                    m_finder.moveSeedToRidge(seed, shift_distance.value());
                     builder2.add_point(seed.firstPoint(), 1);
                     builder2.push_line();
                 }
@@ -376,16 +412,16 @@ int main(int argc, char *argv[])
                 // just shift
                 reporter.start("Shifting all seeds");
                 for(auto& seed: seeds){
-                    m_finder.moveSeedToRidge(seed, shift_distance_val);
+                    m_finder.moveSeedToRidge(seed, shift_distance.value());
                 }
                 reporter.end();
             }
         }
         
         // skip invalid seeds (only if not sampled by components?)
-        if(program.is_used("--border-margin"))
+        if(border_margin)
         {
-            m_finder.settings.image_border_threshold = program.get<float>("--border-margin");
+            m_finder.settings.image_border_threshold = border_margin.value();
             auto skippedSeeds = std::vector<ridgesurface::Seed>();
             for(auto seed: seeds){
                 if(m_finder.validSeed(seed)){
@@ -423,7 +459,7 @@ int main(int argc, char *argv[])
                 }
                 // seedpoint creation
                 ridgesurface::SeedPoint sp(candidate.value());
-                ridgesurface::Seed seed(sp, program.get<float>("--range"));
+                ridgesurface::Seed seed(sp, fm_range);
                 m_finder.addSeed(seed);
                 if(debug){
                     m_finder.calculate().save_each_patch(debug_path / input_name.stem() / "patches" / input_name.stem().concat("_rsf_"));
