@@ -282,6 +282,7 @@ read(std::ifstream& inputFile, T* data, std::size_t size, std::endian endian)
     }
     else{
         // we need to buffer input
+        // TODO: this code get's stuck
         S buf[1024];
         auto counter = 0;
         while(counter < size){

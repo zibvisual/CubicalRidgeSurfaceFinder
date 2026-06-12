@@ -24,7 +24,7 @@ struct LineSetPoint {
     T data;
 
     /**
-     * Print the inner data.
+     * Print the inner data of monostate (nothing).
      */
     template <class N = T, typename std::enable_if<std::is_same<N, std::monostate>::value, int>::type = 0>
     void print_data(std::ostream& output) const {
@@ -32,7 +32,7 @@ struct LineSetPoint {
     }
 
     /**
-     * Print the inner data.
+     * Print the inner data of a string.
      */
     template <class S = T, typename std::enable_if<std::is_same<S, std::string>::value, int>::type = 0>
     void print_data(std::ostream& output) const {
@@ -40,15 +40,15 @@ struct LineSetPoint {
     }
 
     /**
-     * Print the inner data.
+     * Print the inner data of arithmetic value.
      */
     template <class I = T, typename std::enable_if<std::is_arithmetic<I>::value, int>::type = 0>
     void print_data(std::ostream& output) const {
-        output << data << std::endl;
+        output << std::to_string(data) << std::endl;
     }
 
     /**
-     * Print the inner data.
+     * Print the inner data of a tuple (recursive).
      */
     template <class Tuple = T, typename std::enable_if<is_tuple<Tuple>::value, int>::type = 0>
     void print_data(std::ostream& output) const {

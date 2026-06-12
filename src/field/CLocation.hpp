@@ -13,8 +13,8 @@ public:
     : m_index(dims.contains(location) ? static_cast<uint64_t>(location.z()) * dims.x() * dims.y() + static_cast<uint64_t>(location.y()) * dims.x() + static_cast<uint64_t>(location.x()) : std::numeric_limits<uint64_t>::max())
     {}
 
-    CLocation(uint64_t index)
-        : m_index(index)
+    CLocation(uint64_t c_index)
+        : m_index(c_index)
     {}
 
     // Empty CLocation (out of bounds)
@@ -44,7 +44,7 @@ public:
         return location_unsafe(dims);
     }
 
-    uint64_t index() const
+    uint64_t c_index() const
     {
         return m_index;
     }
