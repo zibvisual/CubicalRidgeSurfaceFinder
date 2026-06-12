@@ -100,10 +100,9 @@ int main(int argc, char *argv[])
     // Implicit values do not work if the argument is optional
 
     // seeds
-    auto& input = program.add_mutually_exclusive_group(true);
-    input.add_argument("-s", "--seed").help("Label field or vertex set");
-    input.add_argument("--sample-component").nargs(0,1).scan<'g', float>().help("Generate one seed point per component (threshold creates mask). Useful with --automatic. [implicit: min of image]");
-    input.add_argument("--sample-greedy").nargs(0,1).scan<'g', float>().help("Generate many seedpoint with exclusion zone dependent on fast marching range and given multiplicative. [implicit: 0.8]");
+    program.add_argument("-s", "--seed").help("Label field or vertex set");
+    program.add_argument("--sample-component").nargs(0,1).scan<'g', float>().help("Generate one seed point per component (threshold creates mask). Useful with --automatic. [implicit: min of image]");
+    program.add_argument("--sample-greedy").nargs(0,1).scan<'g', float>().help("Generate many seedpoint with exclusion zone dependent on fast marching range and given multiplicative. [implicit: 0.8]");
 
     // fm settings
     program.add_argument("--min").scan<'g', float>().help("Min threshold. Everything under is not touched. [default: min of image]");
@@ -126,6 +125,9 @@ int main(int argc, char *argv[])
     
     // filter
     // program.add_argument("-f", "--filter");
+
+    // shortcuts
+    program.add_argument("--membrane").default_value(false).implicit_value(true).help("Default settings for membrane midsurface extraction.");
 
     // output
     program.add_argument("-o", "--output").help("Name of output file");
@@ -209,7 +211,6 @@ int main(int argc, char *argv[])
         std::cerr << e.what() << '\n';
         return 1;
     }
-    std::cout << "Dims: " << img.dims() << std::endl;
 
     // Get min and max of image
     const auto img_min_max = img.min_max();
@@ -217,42 +218,67 @@ int main(int argc, char *argv[])
     const auto img_max = img_min_max.second;
 
     // Settings:
-    auto debug_setting = flatten_arg(program, "--debug", "debug");
+    auto debug_setting = flatten_arg<std::string>(program, "--debug", "debug");
     bool debug = debug_setting.has_value();
     std::filesystem::path debug_path = debug_setting.value_or("debug");
+    
+    const auto fm_range = program.get<float>("--range");
+    const auto min = program.present<float>("--min").value_or(img_min);
+    const auto max = program.present<float>("--max").value_or(img_max * 1.2f);
+    
+    auto sample_component = flatten_arg(program, "--sample-component", min);
+    auto sample_greedy = flatten_arg(program, "--sample-greedy", 0.8f);
+    
+    const float default_shift_distance = fm_range * 0.1 * img.getVoxelSize().length();
+    const std::optional<float> shift_distance_voxels = flatten_arg<float>(program, "--shift", fm_range * 0.1);
+    auto shift_distance = shift_distance_voxels ? std::optional<float>(shift_distance_voxels.value() * img.getVoxelSize().length()) : std::nullopt;
+    
+    std::optional<int> border_padding = flatten_arg(program, "--border-padding", 10);
+    auto border_margin = flatten_arg(program, "--border-margin", 0.1f);
+
+    // Shortcuts
+    bool membrane = program.get<bool>("--membrane");
+    if(membrane){
+        sample_component = std::nullopt;
+        if(!sample_greedy){
+            sample_greedy = 0.8f;
+        }
+        if(!shift_distance){
+            shift_distance = default_shift_distance;
+        }
+        if(!border_padding){
+            border_padding = 10;
+        }
+        if(!border_margin){
+            border_margin = 0.1f;
+        }
+    }
+
+    // Check for exclusivity
+    if(program.is_used("-s") + sample_component.has_value() + sample_greedy.has_value() != 1){
+        std::cout << "One of the arguments are required (or a shortcut): [-s/--seed, --sample-component, --sample-greedy]" << std::endl;
+        return 1;
+    }
+
+    // Print Settings
+    std::cout << "Dims: " << img.dims() << std::endl;
     if(debug){
         std::cout << "Debug activated with files saved at " << debug_path << std::endl;
     }
-
-    const auto fm_range = program.get<float>("--range");
     std::cout << "FM range: " << fm_range << std::endl;
-
-    const auto min = program.present<float>("--min").value_or(img_min);
-    const auto max = program.present<float>("--max").value_or(img_max * 1.2f);
     std::cout << "Cost intensity range for marching set to [" << min << ", " << max << "]" << std::endl;
-
-    const auto sample_component = flatten_arg(program, "--sample-component", min);
-    const auto sample_greedy = flatten_arg(program, "--sample-greedy", 0.8f);
     if(sample_component){
         std::cout << "seed generation with threshold " << sample_component.value() << std::endl;
     }
     if(sample_greedy){
         std::cout << "seed generation with voxel range of " << (sample_greedy.value() * fm_range) << std::endl;
     }
-
-    const float default_shift_distance = fm_range * 0.1 * img.getVoxelSize().length();
-    const std::optional<float> shift_distance_voxels = flatten_arg<float>(program, "--shift", fm_range * 0.1);
     if(shift_distance_voxels){
         std::cout << "seed shifting distance of up to " << shift_distance_voxels.value() << " voxels" << std::endl;
     }
-    const auto shift_distance = shift_distance_voxels ? std::optional<float>(shift_distance_voxels.value() * img.getVoxelSize().length()) : std::nullopt;
-
-    const std::optional<int> border_padding = flatten_arg(program, "--border-padding", 10);
     if(border_padding){
         std::cout << "border padding of " << border_padding.value() << std::endl;
     }
-
-    const auto border_margin = flatten_arg(program, "--border-margin", 0.1f);
     if(border_margin){
         std::cout << "border margin of " << border_margin.value() << std::endl;
     }
