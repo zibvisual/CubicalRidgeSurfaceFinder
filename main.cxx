@@ -205,6 +205,7 @@ int main(int argc, char *argv[])
     RawField<float> img;
     try
     {
+        // TODO: check if nrrd values were float/double. If it could be labels, we should warn the user!
         img = RawField<float>::load(program.get("input"), args);
     }
     catch (const std::exception &e)
@@ -405,9 +406,9 @@ int main(int argc, char *argv[])
                 m_finder.addSeed(seed);
             }
         }
-        
+
         if(debug){
-            patched_surface.update(m_finder.recalculate());
+            m_finder.recalculate().save_each_patch(debug_path / input_name.stem() / "patches" / input_name.stem().concat("_rsf_"));
         }else{
             m_finder.recalculate();
         }
@@ -425,7 +426,7 @@ int main(int argc, char *argv[])
                 ridgesurface::Seed seed(sp, program.get<float>("--range"));
                 m_finder.addSeed(seed);
                 if(debug){
-                    patched_surface.update(m_finder.calculate());
+                    m_finder.calculate().save_each_patch(debug_path / input_name.stem() / "patches" / input_name.stem().concat("_rsf_"));
                 }else{
                     m_finder.calculate();
                 }
