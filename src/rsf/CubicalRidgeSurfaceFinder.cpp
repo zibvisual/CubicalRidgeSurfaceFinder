@@ -893,7 +893,7 @@ namespace ridgesurface
         const auto polarity = m_graph.getEdge(seed1, seed2);
         if (!polarity)
         {
-            // if it is no neighbor, we do not generate any faces (this might create some small holes when two patches just barely touch)
+            // if it is no neighbor, we do not generate any faces
             return false;
         }
         return ((m_cum_label.data()[i] % 2) != (m_cum_label.data()[j] % 2)) ^ polarity.value();
@@ -1081,18 +1081,19 @@ namespace ridgesurface
                 continue;
             }
 
-            // calculate average speed (we might want to normalize it)
-            const float speed_threshold = 0.01;
+            // calculate average speed
             auto time1 = m_cum_time.data()[pair.first];
             auto time2 = m_cum_time.data()[pair.second];
-            auto distance1 = m_cum_distance.data()[pair.first];
-            auto distance2 = m_cum_distance.data()[pair.second];
             if(time1 < 0.0001 || time2 < 0.0001){
                 m_graph.addEdge(seed1, seed2, false);
                 m_graph.addEdge(seed2, seed1, false);
             }
-            float speed1 = distance1 / time1;
-            float speed2 = distance2 / time2;
+            auto distance1 = m_cum_distance.data()[pair.first];
+            auto distance2 = m_cum_distance.data()[pair.second];
+            // normalized speed
+            const float speed_threshold = 0.0;
+            float speed1 = (distance1 * m_max_time_marched[seed1]) / (time1 * m_seeds[seed1].getDistance());
+            float speed2 = (distance2 * m_max_time_marched[seed2]) / (time2 * m_seeds[seed2].getDistance());
             if(speed1 > speed_threshold || speed2 > speed_threshold)
             {
                 m_graph.addEdge(seed1, seed2, false);
@@ -1371,6 +1372,8 @@ namespace ridgesurface
         }
         // copy all labels
         m_labels[id] = m_label_view.inner();
+        // save max time marched
+        m_max_time_marched[id] = m_fm.maxTimeMarched();
     }
 
     void

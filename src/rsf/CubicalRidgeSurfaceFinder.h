@@ -237,6 +237,7 @@ namespace ridgesurface
         // TODO: save m_label_view as a bit hashmap for ALL patches --> like m_cum_label but allow overlap?! (still sparse in some sense)
         // for now: do not care about performance
         std::unordered_map<uint64_t, SmallHashMap<int64_t, unsigned char>> m_labels;
+        std::unordered_map<uint64_t, float> m_max_time_marched;
 
         // optional memory where data is saved (TODO: refactor, such that we have temporary memory itself as objects which then can get copied if necessary -> problematic as we use closures right now)
         std::unordered_map<Face, std::size_t>* ts_sphere_coloring;
