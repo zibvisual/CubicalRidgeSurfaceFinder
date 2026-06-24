@@ -26,17 +26,24 @@ set(CMAKE_STATIC_LIBRARY_PREFIX "")
 set(CMAKE_SHARED_LIBRARY_PREFIX "")
 
 # create own library
+# find_package(OpenMP)
+# set(SOURCES src/utils/Vec.cpp src/rsf/CubicalRidgeSurfaceFinder.cpp src/rsf/Seed.cpp src/io/common.cpp src/filter/bilateralfilter.cpp src/filter/geodesicNeighborhoodLocal.cpp)
 set(SOURCES src/utils/Vec.cpp src/rsf/CubicalRidgeSurfaceFinder.cpp src/rsf/Seed.cpp src/io/common.cpp)
 add_library(rsflib STATIC ${SOURCES})
 target_include_directories(rsflib PUBLIC src)
 target_link_libraries(rsflib PUBLIC fmt::fmt-header-only)
 target_include_directories(rsflib PUBLIC includes/parallel-hashmap)
 target_include_directories(rsflib PUBLIC includes/nanoflann)
-target_include_directories(rsflib PRIVATE includes/eigen)
+target_include_directories(rsflib PUBLIC includes/eigen)
+# target_link_libraries(rsflib PRIVATE OpenMP::OpenMP_CXX)
 
 # create main exec
 add_executable(rsf main.cxx)
 target_link_libraries(rsf PUBLIC rsflib)
+
+# create midmembrane
+add_executable(midmembrane midmembrane.cxx)
+target_link_libraries(midmembrane PUBLIC rsflib)
 
 # create examples
 add_executable(examples examples.cxx)

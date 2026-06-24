@@ -3,12 +3,22 @@
 #include <cstdint>
 #include <vector>
 #include <unordered_map>
+#include <queue>
 
 #include "Dims.hpp"
 #include "UnionFind.hpp"
 
 #include <fastmarching/FastMarching.hpp>
 #include <fastmarching/FastMarchingBitSetObserver.hpp>
+
+#include <field/GridPositionBoxIterator.hpp>
+
+namespace {
+    bool inside_box(VecSize pos, VecSize min, VecSize max){
+        return pos[0] >= min[0] && pos[0] < max[0] && pos[1] >= min[1] && pos[1] < max[1] && pos[2] >= min[2] && pos[2] < max[2] ;
+    }
+}
+
 
 /**
  * Generated sample points to use for seed points in the Ridge Surface Finder. Threshold must be positive.
@@ -62,7 +72,7 @@ std::vector<uint32_t> sample(const float* data, Dims dims, float threshold = 0.0
     return result;
 }
 
-std::vector<uint32_t> greedyFmSampling(progressbar::Reporter& report, const RawFieldView<float>& data, float distance, float min, float max, std::size_t maxPoints = std::numeric_limits<std::size_t>::max())
+std::vector<uint32_t> greedyFmSampling(progressbar::Reporter& report, const RawFieldView<float>& data, float distance, float min, float max, float threshold, std::size_t margin, std::size_t maxPoints = std::numeric_limits<std::size_t>::max())
 {
     // sort by magnitude of the data
     std::priority_queue<std::pair<float, uint64_t> > queue;
@@ -74,9 +84,11 @@ std::vector<uint32_t> greedyFmSampling(progressbar::Reporter& report, const RawF
     fm.maxDistance(distance);
 
     // push queue with all values
-    for(std::size_t i = 0; i < data.dims().size(); ++i){
+    VecSize maxBox = (VecSize)((VecInt) data.dims() - VecInt(margin));
+    for(auto gridPos : GridPositionBoxIterator(VecSize(margin), maxBox)){
+        const auto i = data.createLocation(gridPos).index();
         float val = data.data()[i];
-        if(val > min){
+        if(val > threshold){
             queue.push({val, i});
         }
     }
@@ -112,10 +124,10 @@ std::vector<uint32_t> greedyFmSampling(progressbar::Reporter& report, const RawF
     return points;
 }
 
-// Two things to improve:
-// - because of fm, most border points are not covered --> march a bit further with an inverse FM (which likes borders the most) OR with simple euclidean (a few more voxels in all directions)
-// - we only need to greedily take the local maximas. When turning off voxels, we can check the border, what new paths are possible.
-std::vector<uint32_t> greedySampling(progressbar::Reporter& report, const RawFieldView<float>& data, float distance, float min, float max, std::size_t maxPoints = std::numeric_limits<std::size_t>::max())
+/**  Greedy Sampling which only considers local maximas to reduce queue size.
+ * 
+ */
+std::vector<uint32_t> greedySmartFmSampling(progressbar::Reporter& report, const RawFieldView<float>& data, float distance, float min, float max, float threshold, std::size_t margin, std::size_t maxPoints = std::numeric_limits<std::size_t>::max())
 {
     const auto dims = data.getDims();
 
@@ -131,12 +143,160 @@ std::vector<uint32_t> greedySampling(progressbar::Reporter& report, const RawFie
 
     report.start("Searching for seed points");
     // initialize the queue
-    for(auto gridPos : data.gridPositions())
+    const VecSize maxBox = (VecSize)((VecInt) data.dims() - VecInt(margin));
+    const VecSize minBox = VecSize(margin);
+    for(auto gridPos : GridPositionBoxIterator(minBox, maxBox))
     {
         // ugly, should be improved
         const auto index = data.createLocation(gridPos).index();
         const auto center = data.get_unchecked(index);
-        if(center <= min){
+        if(center <= threshold){
+            continue;
+        }
+
+        if (gridPos[0] != 0 && center < data.get_unchecked(index - 1))
+        {
+            continue;
+        }
+        if (gridPos[0] + 1 != dims[0] && center < data.get_unchecked(index + 1))
+        {
+            continue;
+        }
+        if (gridPos[1] != 0 && center < data.get_unchecked(index - dims[0]))
+        {
+            continue;
+        }
+        if (gridPos[1] + 1 != dims[1] && center < data.get_unchecked(index + dims[0]))
+        {
+            continue;
+        }
+        if (gridPos[2] != 0 && center < data.get_unchecked(index - dims[0] * dims[1]))
+        {
+            continue;
+        }
+        if (gridPos[2] + 1 != dims[2]  && center < data.get_unchecked(index + dims[0] * dims[1]))
+        {
+            continue;
+        }
+
+        // gridPos is a locale maxima
+        queue.push({center, index});
+    }
+
+    const float queue_max = static_cast<float>(queue.size());
+    const float points_max = static_cast<float>(maxPoints);
+
+    // greedy algo
+    auto points = std::vector<uint32_t>();
+    while (!queue.empty() && points.size() < maxPoints)
+    {
+        std::pair<float, uint64_t> entry = queue.top();
+        queue.pop();
+        auto index = entry.second;
+
+        // skip if covered by another seed point
+        if(fm.observer().bitset()[index]){
+            continue;
+        }
+        
+        // set point and run fm
+        points.push_back(index);
+        fm.setStartVoxel(index);
+        fm.march();
+
+        // check border for new locale maxima
+        for(auto border : fm.borderVoxels())
+        {
+            // skip if covered by another seed point
+            if(fm.observer().bitset()[border]){
+                continue;
+            }
+
+            // skip if near image border
+            const auto gridPos = data.lattice().gridLocationFromCIndex(border, data.lattice().dims());
+            if(!inside_box(gridPos, minBox, maxBox)){
+                continue;
+            }
+
+            // check for neigbhorhood
+            const auto center = data.get_unchecked(border);
+            if(center <= threshold){
+                continue;
+            }
+    
+            if (gridPos[0] != 0 && center < data.get_unchecked(border - 1))
+            {
+                continue;
+            }
+            if (gridPos[0] + 1 != dims[0] && center < data.get_unchecked(border + 1))
+            {
+                continue;
+            }
+            if (gridPos[1] != 0 && center < data.get_unchecked(border - dims[0]))
+            {
+                continue;
+            }
+            if (gridPos[1] + 1 != dims[1] && center < data.get_unchecked(border + dims[0]))
+            {
+                continue;
+            }
+            if (gridPos[2] != 0 && center < data.get_unchecked(border - dims[0] * dims[1]))
+            {
+                continue;
+            }
+            if (gridPos[2] + 1 != dims[2]  && center < data.get_unchecked(border + dims[0] * dims[1]))
+            {
+                continue;
+            }
+
+            // locale maxima found
+            queue.push({center, border});
+        }
+
+        if(points.size() % 128 == 0){
+            report.update(fmt::format("Queue: ({:d})", queue.size()));
+            // report.update(std::max((queue_max - queue.size()) / queue_max, points.size() / points_max));
+        }
+    }
+    report.end();
+
+    // TODO: save bitset as image if wanted
+    auto bits = RawField<uint8_t>(dims);
+    for(auto index = 0; index < dims.size(); ++index){
+        bits.data()[index] = (uint8_t) fm.observer().bitset()[index];
+    }
+    bits.save("./debug_tmp/exclusion_zone.nrrd");
+
+    return points;
+}
+
+/**
+ * Greedy sampling which also grows further out than FM itself. May not fully cover the data (even if unklikely).
+ */
+std::vector<uint32_t> greedyShellSampling(progressbar::Reporter& report, const RawFieldView<float>& data, float distance, float min, float max, float threshold, std::size_t margin, std::size_t maxPoints = std::numeric_limits<std::size_t>::max())
+{
+    const auto dims = data.getDims();
+
+    // create FM with a observer which sets the bitfield
+    auto fm = fastmarching::FastMarching<fastmarching::ObserverBitSet<mutil::HashMapMappingView<BigHashMap<uint64_t, float>>>>(report);
+    fm.observer().resize(data.dims().size());
+    fm.data(&data);
+    fm.thresholds(min, max);
+    fm.maxDistance(distance);
+
+    // take biggest maxima first
+    std::priority_queue<std::pair<float, uint64_t> > queue;
+
+    report.start("Searching for seed points");
+    // initialize the queue
+    VecSize maxBox = (VecSize)((VecInt) data.dims() - VecInt(margin));
+    VecSize minBox = VecSize(margin);
+    for(auto gridPos : GridPositionBoxIterator(minBox, maxBox))
+    {
+        // ugly, should be improved
+        const auto index = data.createLocation(gridPos).index();
+        const auto center = data.get_unchecked(index);
+        if(center <= threshold){
             continue;
         }
 
@@ -191,19 +351,120 @@ std::vector<uint32_t> greedySampling(progressbar::Reporter& report, const RawFie
         fm.march();
 
         // TODO: further expand bits by some neighborhood (done with border)
+        // Idea: allow moving "down" from the potential until everything > min is covered (border is enough)
+
+        // grow downwards
+        // we use a heap so we now while filling up which voxels are border voxels
+        auto cmp = [](std::pair<uint64_t, float> left, std::pair<uint64_t, float> right) { return left.second < right.second; };
+        auto heap = std::priority_queue<std::pair<uint64_t, float>, std::vector<std::pair<uint64_t, float>>, decltype(cmp)>();
+        auto new_border = std::vector<uint64_t>();
+        for(auto border : fm.borderVoxels())
+        { 
+            // skip if covered by another seed point
+            if(fm.observer().bitset()[border]){
+                continue;
+            }
+
+            // skip if near image border
+            const auto gridPos = data.lattice().gridLocationFromCIndex(border, data.lattice().dims());
+            if(!inside_box(gridPos, minBox, maxBox)){
+                continue;
+            }
+
+            heap.push(std::make_pair(border, data.get_unchecked(border)));
+            fm.observer().bitset()[border] = true;
+        }
+
+        while(!heap.empty()){
+            auto pair = heap.top();
+            auto voxel = pair.first;
+            auto center = pair.second;
+            heap.pop();
+
+            // check for neighborhood
+            const auto gridPos = data.lattice().gridLocationFromCIndex(voxel, data.lattice().dims());
+
+            const auto left = voxel - 1;
+            const auto right = voxel + 1;
+            const auto up = voxel - dims[0];
+            const auto down = voxel + dims[0];
+            const auto above = voxel - dims[0] * dims[1];
+            const auto below = voxel + dims[0] * dims[1];
+
+            if (gridPos[0] != 0 && data.get_unchecked(left) > threshold && !fm.observer().bitset()[left])
+            {
+                auto val = data.get_unchecked(left);
+                if(center > val){
+                    heap.push(std::make_pair(left, val));
+                    fm.observer().bitset()[left] = true;
+                }else{
+                    new_border.push_back(left);
+                }
+            }
+            if (gridPos[0] + 1 != dims[0] && data.get_unchecked(right) > threshold && !fm.observer().bitset()[right])
+            {
+                auto val = data.get_unchecked(right);
+                if(center > val){
+                    heap.push(std::make_pair(right, val));
+                    fm.observer().bitset()[right] = true;
+                }else{
+                    new_border.push_back(right);
+                }
+            }
+            if (gridPos[1] != 0 && data.get_unchecked(up) > threshold && !fm.observer().bitset()[up])
+            {
+                auto val = data.get_unchecked(up);
+                if(center > val){
+                    heap.push(std::make_pair(up, val));
+                    fm.observer().bitset()[up] = true;
+                }else{
+                    new_border.push_back(up);
+                }
+            }
+            if (gridPos[1] + 1 != dims[1] && data.get_unchecked(down) > threshold && !fm.observer().bitset()[down])
+            {
+                auto val = data.get_unchecked(down);
+                if(center > val){
+                    heap.push(std::make_pair(down, val));
+                    fm.observer().bitset()[down] = true;
+                }else{
+                    new_border.push_back(down);
+                }
+            }
+            if (gridPos[2] != 0 && data.get_unchecked(above) > threshold && !fm.observer().bitset()[above])
+            {
+                auto val = data.get_unchecked(above);
+                if(center > val){
+                    heap.push(std::make_pair(above, val));
+                    fm.observer().bitset()[above] = true;
+                }else{
+                    new_border.push_back(above);
+                }
+            }
+            if (gridPos[2] + 1 != dims[2] && data.get_unchecked(below) > threshold && !fm.observer().bitset()[below])
+            {
+                auto val = data.get_unchecked(below);
+                if(center > val){
+                    heap.push(std::make_pair(below, val));
+                    fm.observer().bitset()[below] = true;
+                }else{
+                    new_border.push_back(below);
+                }
+            }
+        }
 
         // check border for new locale maxima
-        for(auto border : fm.borderVoxels())
+        for(auto border : new_border)
         {
             // skip if covered by another seed point
             if(fm.observer().bitset()[border]){
                 continue;
             }
 
-            // check for neigbhorhodd
+            // check for neigbhorhood
             const auto gridPos = data.lattice().gridLocationFromCIndex(border, data.lattice().dims());
             const auto center = data.get_unchecked(border);
-            if(center <= min){
+            if(center <= threshold){
                 continue;
             }
     
@@ -242,6 +503,13 @@ std::vector<uint32_t> greedySampling(progressbar::Reporter& report, const RawFie
         }
     }
     report.end();
+
+    // TODO: save bitset as image if wanted
+    auto bits = RawField<uint8_t>(dims);
+    for(auto index = 0; index < dims.size(); ++index){
+        bits.data()[index] = (uint8_t) fm.observer().bitset()[index];
+    }
+    bits.save("./debug_tmp/exclusion_zone.nrrd");
 
     return points;
 }

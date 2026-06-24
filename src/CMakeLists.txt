@@ -1,5 +1,6 @@
 add_subdirectory(fastmarching)
 add_subdirectory(field)
+add_subdirectory(filter)
 add_subdirectory(graph)
 add_subdirectory(io)
 add_subdirectory(rsf)

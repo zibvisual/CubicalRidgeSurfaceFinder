@@ -258,6 +258,17 @@ public:
         return m_view.get_unchecked(location);
     }
 
+    std::pair<T,T> min_max() const
+    {
+        auto min = m_data[0];
+        auto max = m_data[0];
+        for(auto val : m_data){
+            min = std::min(min, val);
+            max = std::max(max, val);
+        }
+        return std::make_pair(min, max);
+    }
+
 
     /** --------------------------------------------------------------------------- */
 

@@ -19,6 +19,7 @@
 
 #include <utils/SeedSampler.hpp>
 #include <utils/StructureTensor.hpp>
+#include <utils/parsing.hpp>
 
 #include <field/GridPositionBorderIterator.hpp>
 
@@ -29,59 +30,7 @@
 // #include <chrono>
 // #include <thread>
 
-
 namespace {
-    template <class T>
-    std::optional<T> flatten_arg(const argparse::ArgumentParser& program, std::string name, T implicit_value){
-        if(!program.is_used(name)){
-            return {};
-        }
-        auto arg = program.get<std::vector<T>>(name);
-        if(arg.empty()){
-            return implicit_value;
-        }
-        return arg.front();
-    }
-
-    template <class T, unsigned long N>
-    std::optional<std::array<T,N>> flatten_args(const argparse::ArgumentParser& program, std::string name, std::array<T, N> implicit_values)
-    {
-        if(!program.is_used(name)){
-            return {};
-        }
-        auto result = implicit_values;
-        auto arg = program.get<std::vector<T>>(name);
-        std::size_t index = 0;
-        while(index < arg.size()){
-            result.push_back(arg[index++]);
-        }
-        return result;
-    }
-
-    template <class T>
-    T get_arg(const argparse::ArgumentParser& program, std::string name, T implicit_value){
-        auto arg = program.get<std::vector<T>>(name);
-        if(arg.empty()){
-            return implicit_value;
-        }
-        return arg.front();
-    }
-
-    template <class T, unsigned int N>
-    std::vector<T> get_args(const argparse::ArgumentParser& program, std::string name, std::array<T, N> implicit_values)
-    {
-        auto result = std::vector<T>();
-        auto arg = program.get<std::vector<T>>(name);
-        std::size_t index = 0;
-        while(index < arg.size()){
-            result.push_back(arg[index++]);
-        }
-        while(index < N){
-            result.push_back(implicit_values[index++]);
-        }
-        return result;
-    }
-
     void saveSeeds(std::filesystem::path op, const std::vector<ridgesurface::Seed>& seeds){
         auto data = vertex_data<float>{std::vector<VecFloat>(), std::vector<float>()};
         for(auto seed : seeds){
@@ -97,6 +46,13 @@ int main(int argc, char *argv[])
     argparse::ArgumentParser program("Ridge Surface Finder", std::to_string(RidgeSurfaceFinder_VERSION_MAJOR) + "." + std::to_string(RidgeSurfaceFinder_VERSION_MINOR));
     program.add_argument("input").help("Input file to load");
 
+    // seed generation
+    argparse::ArgumentParser seed_sample("seed");
+    seed_sample.add_argument("algorithm").default_value(std::string{"shell"}).choices("component", "fm", "shell");
+    program.add_argument("--min").scan<'g', float>().help("Min threshold. Everything under is not touched. [default: min of image]");
+    program.add_argument("--max").scan<'g', float>().help("Max threshold. Everything above or equal has no cost. [default: max of image * 1.2 (max - min)]");
+
+
     // Implicit values do not work if the argument is optional
 
     // seeds
@@ -106,7 +62,7 @@ int main(int argc, char *argv[])
 
     // fm settings
     program.add_argument("--min").scan<'g', float>().help("Min threshold. Everything under is not touched. [default: min of image]");
-    program.add_argument("--max").scan<'g', float>().help("Max threshold. Everything above or equal has no cost. [default: max of image * 1.2]");
+    program.add_argument("--max").scan<'g', float>().help("Max threshold. Everything above or equal has no cost. [default: max of image * 1.2 (max - min)]");
     program.add_argument("--range").default_value(50.0f).scan<'g', float>().help("How far each seedpoint should be marched for");
     
     // processing
@@ -216,25 +172,27 @@ int main(int argc, char *argv[])
     const auto img_min_max = img.min_max();
     const auto img_min = img_min_max.first;
     const auto img_max = img_min_max.second;
+    const auto img_diff = img_max - img_min;
 
     // Settings:
-    auto debug_setting = flatten_arg<std::string>(program, "--debug", "debug");
+    auto debug_setting = parsing::flatten_arg<std::string>(program, "--debug", "debug");
     bool debug = debug_setting.has_value();
     std::filesystem::path debug_path = debug_setting.value_or("debug");
     
     const auto fm_range = program.get<float>("--range");
     const auto min = program.present<float>("--min").value_or(img_min);
-    const auto max = program.present<float>("--max").value_or(img_max * 1.2f);
+    const auto max = program.present<float>("--max").value_or(img_max + img_diff * 1.2f);
     
-    auto sample_component = flatten_arg(program, "--sample-component", min);
-    auto sample_greedy = flatten_arg(program, "--sample-greedy", 0.8f);
+    auto sample_component = parsing::flatten_arg(program, "--sample-component", min);
+    auto sample_greedy = parsing::flatten_arg(program, "--sample-greedy", 0.8f);
     
     const float default_shift_distance = fm_range * 0.1 * img.getVoxelSize().length();
-    const std::optional<float> shift_distance_voxels = flatten_arg<float>(program, "--shift", fm_range * 0.1);
+    const std::optional<float> shift_distance_voxels = parsing::flatten_arg<float>(program, "--shift", fm_range * 0.1);
     auto shift_distance = shift_distance_voxels ? std::optional<float>(shift_distance_voxels.value() * img.getVoxelSize().length()) : std::nullopt;
     
-    std::optional<int> border_padding = flatten_arg(program, "--border-padding", 10);
-    auto border_margin = flatten_arg(program, "--border-margin", 0.1f);
+    std::optional<int> border_padding = parsing::flatten_arg(program, "--border-padding", 10);
+    auto border_margin = parsing::flatten_arg(program, "--border-margin", 0.1f);
+    int border_margin_tmp = 0;
 
     // Shortcuts
     bool membrane = program.get<bool>("--membrane");
@@ -341,7 +299,7 @@ int main(int argc, char *argv[])
         std::vector<uint32_t> generated_seed_indices;
         if(sample_greedy)
         {
-            generated_seed_indices = greedySampling(reporter, img.get_view(), sample_greedy.value() * fm_range, min, max);
+            generated_seed_indices = greedyShellSampling(reporter, img.get_view(), sample_greedy.value() * fm_range, min, max, min, border_margin_tmp);
         }else if(sample_component)
         {
             generated_seed_indices = sample(img.data(), img.dims(), sample_component.value());
