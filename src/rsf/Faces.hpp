@@ -485,6 +485,10 @@ public:
     }
 
     // VecSize corner, Dims dims, VecFloat voxelSize, VecFloat fieldPosition
+
+    /**
+     * Must be aligned with cornerIndices!
+     */
     std::array<VecFloat, 4> cornerPosition(Lattice lattice){
         const auto gridPos = Lattice::gridLocationFromCIndex(voxel, lattice.dims());
         const auto pos = lattice.cornerPosition(gridPos);
@@ -529,10 +533,10 @@ public:
         else if (direction == Direction::BACKWARD)
         {
             return {
-                pos,
-                pos + VecInt::UP * voxelsize[1],
                 pos + VecInt::RIGHT * voxelsize[0] + VecInt::UP * voxelsize[1],
                 pos + VecInt::RIGHT * voxelsize[0],
+                pos,
+                pos + VecInt::UP * voxelsize[1],
             };
         }
         else
