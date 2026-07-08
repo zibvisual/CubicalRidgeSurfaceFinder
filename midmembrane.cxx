@@ -56,8 +56,8 @@ int main(int argc, char *argv[])
     program.add_argument("--range").default_value(50.0f).scan<'g', float>().help("How far each seedpoint should be marched for");
      
     // processing
-    program.add_argument("--border-padding").default_value(5).scan<'i', int>().help("How much the image should be extended. Given by voxel number.");
-    program.add_argument("--border-margin").default_value(1).scan<'i', int>().help("How far away a seed point must be from the image border.");
+    program.add_argument("--border-padding").default_value(10).scan<'i', int>().help("How much the image should be extended. Given by voxel number.");
+    program.add_argument("--border-margin").default_value(10).scan<'i', int>().help("How far away a seed point must be from the image border.");
 
     // spatial information
     auto &centering = program.add_mutually_exclusive_group();
@@ -71,44 +71,43 @@ int main(int argc, char *argv[])
     program.add_argument("-o", "--output").help("Name of output file");
     program.add_argument("-d", "--debug").nargs(0,1).help("Save debug information in given path");
  
-     try
-     {
-        program.parse_args(argc, argv);
-     }
-     catch (const std::exception &err)
-     {
-        std::cerr << err.what() << std::endl;
-        std::cerr << program;
-        return 1;
-     }
- 
-     auto time_begin = std::chrono::steady_clock::now();
-     auto reporter = progressbar::Reporter();
-     std::filesystem::path input_name = program.get("input");
-     // reporter.start("CRSF");
+    try
+    {
+       program.parse_args(argc, argv);
+    }
+    catch (const std::exception &err)
+    {
+       std::cerr << err.what() << std::endl;
+       std::cerr << program;
+       return 1;
+    }
 
-     // Arguments
-     // TODO: use merge method of spatial arguments
-     auto args = parsing::merge_spatial_arguments(program);
-     if(!args)
-     {
-        return 1;
+    auto time_begin = std::chrono::steady_clock::now();
+    auto reporter = progressbar::Reporter();
+    std::filesystem::path input_name = program.get("input");
+    // reporter.start("CRSF");
+
+    // Arguments
+    auto args = parsing::merge_spatial_arguments(program);
+    if(!args)
+    {
+       return 1;
     }
  
-     // load input
-     std::cout << "------------------------------------------------" << std::endl;
-     std::cout << "Load " << input_name << std::endl;
-     RawField<float> img;
-     try
-     {
-         // TODO: check if nrrd values were float/double. If it could be labels, we should warn the user!
-        img = RawField<float>::load(input_name, args.value());
-     }
-     catch (const std::exception &e)
-     {
-         std::cerr << e.what() << '\n';
-         return 1;
-     }
+    // load input
+    std::cout << "------------------------------------------------" << std::endl;
+    std::cout << "Load " << input_name << std::endl;
+    RawField<float> img;
+    try
+    {
+        // TODO: check if nrrd values were float/double. If it could be labels, we should warn the user!
+       img = RawField<float>::load(input_name, args.value());
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << e.what() << '\n';
+        return 1;
+    }
  
     // Get min and max of image
     const auto img_min_max = img.min_max();
@@ -123,7 +122,7 @@ int main(int argc, char *argv[])
      
     const auto fm_range = program.get<float>("--range");
     const auto min = program.present<float>("--min").value_or(img_min);
-    const auto max = program.present<float>("--max").value_or(img_max + img_diff * 1.2f);
+    const auto max = program.present<float>("--max").value_or(img_max + img_diff * 1.5f);
      
     auto seed_range = program.get<float>("--seed-range");
     auto default_seed_threshold = img_min;
