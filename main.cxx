@@ -74,6 +74,7 @@ int main(int argc, char *argv[])
     program.add_argument("-a", "--automatic").nargs(1,2).help("Adds more seed points: (min-distance-between-points, [max seedpoints])");
     program.add_argument("--border-margin").default_value(0).scan<'i', int>().help("How far away a seed point must be from the image border.");
     program.add_argument("--border-padding").default_value(5).scan<'i', int>().help("How much the image should be extended. Given by voxel number.");
+    program.add_argument("--enforce-orientability").default_value(false).implicit_value(true).help("Enforce an orientable surface by disconnecting some patches if necessary.");
 
     // spatial information
     auto &centering = program.add_mutually_exclusive_group();
@@ -164,6 +165,8 @@ int main(int argc, char *argv[])
     int border_padding = program.get<int>("--border-padding");
     int border_margin = program.get<int>("--border-margin");
 
+    bool enforce_orientability = program.get<bool>("--enforce-orientability");
+
     // Print Settings
     std::cout << "Dims: " << img.dims() << std::endl;
     if(debug){
@@ -186,6 +189,9 @@ int main(int argc, char *argv[])
     }
     if(border_margin > 0){
         std::cout << "border margin of " << border_margin << std::endl;
+    }
+    if(enforce_orientability){
+        std::cout << "Orientability is enforced!" << std::endl;
     }
 
     // automatic values
@@ -302,6 +308,7 @@ int main(int argc, char *argv[])
             VecSize max_clip = static_cast<VecSize>(originalDims) + min_clip;
             m_finder.getTransformer().setClipping(min_clip, max_clip);
         }
+        m_finder.settings.enforce_orientability = enforce_orientability;
 
         // shift seeds
         if(shift_distance > 0.0f){

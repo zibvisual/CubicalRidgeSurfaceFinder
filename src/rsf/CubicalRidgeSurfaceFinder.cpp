@@ -813,6 +813,30 @@ namespace ridgesurface
         m_patch_orientation = std::move(orientations);
     }
 
+    /**
+     * delete all neighboring edges which do not coincide with the orientation of the patches
+     */
+    void CubicalRidgeSurfaceFinder::enforce_orientability()
+    {
+        auto neighbors_to_delete = std::vector<uint64_t>();
+        for(auto &pair : m_seeds){
+            neighbors_to_delete.clear();
+            auto from = pair.first;
+            for(auto edge : m_graph.neighbors(from)){
+                auto to = edge.first;
+                bool patch_inversion = m_patch_orientation[from] ^ m_patch_orientation[to];
+                if(edge.second ^ patch_inversion){
+                    // we need an inversion but the edge does not or vice versa
+                    neighbors_to_delete.push_back(to);
+                }
+            }
+            // delete now (previously we can't without invalidating the iterator)
+            for(auto to : neighbors_to_delete){
+                m_graph.removeEdge(from, to);
+            }
+        }
+    }
+
     void
     CubicalRidgeSurfaceFinder::addPatch(uint64_t id)
     {
@@ -908,6 +932,10 @@ namespace ridgesurface
         initialize_neighbors();
         orient_neighbors();
         update_patch_orientations();
+        if(settings.enforce_orientability){
+            enforce_orientability();
+        }
+        
 
         // not needed for Surface Finder. Only reduces the amount of intersection in the graph.
         // finalize_neighborhood_graph();

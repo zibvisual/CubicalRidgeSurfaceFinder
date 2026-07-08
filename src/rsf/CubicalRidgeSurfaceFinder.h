@@ -171,14 +171,15 @@ namespace ridgesurface
         // not used right now, but could give better results
         void remove_non_touching_neighors_cube();
         void update_patch_orientations();
-
+        
         void finalize_neighborhood_graph();
-
-
+        
+        
         // --------------     experimental methods ----------------
         // create neighbors graph (without specific orientation) by looking at cum_labels and look at touching labels with a specific speed threshold
         void initialize_neighbors();
         void orient_neighbors();
+        void enforce_orientability();
         // --------------   end experimental methods ----------------
 
 

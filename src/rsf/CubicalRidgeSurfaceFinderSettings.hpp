@@ -7,6 +7,7 @@ namespace ridgesurface {
 struct CubicalRidgeSurfaceFinderSettings
 {
     float image_border_threshold = 0.1;
+    bool enforce_orientability = false;
 
     float border_distance_threshold(const Lattice& lattice, float distance_to_march) const
     {
