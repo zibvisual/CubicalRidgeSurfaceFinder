@@ -476,11 +476,11 @@ public:
         }
         else if (direction == Direction::BACKWARD)
         {
-            return pos + VecInt::BACKWARD * voxelsize[2];
+            return pos - VecInt::FORWARD * voxelsize[2];
         }
         else
         { //(direction == Direction::FORWARD)
-            return pos - VecInt::BACKWARD * voxelsize[2];
+            return pos + VecInt::FORWARD * voxelsize[2];
         }
     }
 
@@ -495,15 +495,15 @@ public:
             return {
                 pos + VecInt::UP * voxelsize[1],
                 pos,
-                pos + VecInt::BACKWARD * voxelsize[2],
-                pos + VecInt::UP * voxelsize[1] + VecInt::BACKWARD * voxelsize[2],
+                pos + VecInt::FORWARD * voxelsize[2],
+                pos + VecInt::UP * voxelsize[1] + VecInt::FORWARD * voxelsize[2],
             };
         }
         else if (direction == Direction::RIGHT)
         {
             return {
-                pos + VecInt::RIGHT * voxelsize[0] + VecInt::UP * voxelsize[1] + VecInt::BACKWARD * voxelsize[2],
-                pos + VecInt::RIGHT * voxelsize[0] + VecInt::BACKWARD * voxelsize[2],
+                pos + VecInt::RIGHT * voxelsize[0] + VecInt::UP * voxelsize[1] + VecInt::FORWARD * voxelsize[2],
+                pos + VecInt::RIGHT * voxelsize[0] + VecInt::FORWARD * voxelsize[2],
                 pos + VecInt::RIGHT * voxelsize[0],
                 pos + VecInt::RIGHT * voxelsize[0] + VecInt::UP * voxelsize[1],
             };
@@ -511,37 +511,37 @@ public:
         else if (direction == Direction::DOWN)
         {
             return {
-                pos + VecInt::BACKWARD * voxelsize[2],
+                pos + VecInt::FORWARD * voxelsize[2],
                 pos,
                 pos + VecInt::RIGHT * voxelsize[0],
-                pos + VecInt::RIGHT * voxelsize[0] + VecInt::BACKWARD * voxelsize[2],
+                pos + VecInt::RIGHT * voxelsize[0] + VecInt::FORWARD * voxelsize[2],
             };
         }
         else if (direction == Direction::UP)
         {
             return {
-                pos + VecInt::RIGHT * voxelsize[0] + VecInt::UP * voxelsize[1] + VecInt::BACKWARD * voxelsize[2],
+                pos + VecInt::RIGHT * voxelsize[0] + VecInt::UP * voxelsize[1] + VecInt::FORWARD * voxelsize[2],
                 pos + VecInt::RIGHT * voxelsize[0] + VecInt::UP * voxelsize[1],
                 pos + VecInt::UP * voxelsize[1],
-                pos + VecInt::UP * voxelsize[1] + VecInt::BACKWARD * voxelsize[2],
+                pos + VecInt::UP * voxelsize[1] + VecInt::FORWARD * voxelsize[2],
             };
         }
         else if (direction == Direction::BACKWARD)
         {
             return {
-                pos + VecInt::RIGHT * voxelsize[0] + VecInt::UP * voxelsize[1],
-                pos + VecInt::RIGHT * voxelsize[0],
                 pos,
                 pos + VecInt::UP * voxelsize[1],
+                pos + VecInt::RIGHT * voxelsize[0] + VecInt::UP * voxelsize[1],
+                pos + VecInt::RIGHT * voxelsize[0],
             };
         }
         else
         { //(direction == Direction::FORWARD)
             return {
-                pos + VecInt::UP * voxelsize[1] + VecInt::BACKWARD * voxelsize[2],
-                pos + VecInt::BACKWARD * voxelsize[2],
-                pos + VecInt::RIGHT * voxelsize[0] + VecInt::BACKWARD * voxelsize[2],
-                pos + VecInt::RIGHT * voxelsize[0] + VecInt::UP * voxelsize[1] + VecInt::BACKWARD * voxelsize[2],
+                pos + VecInt::UP * voxelsize[1] + VecInt::FORWARD * voxelsize[2],
+                pos + VecInt::FORWARD * voxelsize[2],
+                pos + VecInt::RIGHT * voxelsize[0] + VecInt::FORWARD * voxelsize[2],
+                pos + VecInt::RIGHT * voxelsize[0] + VecInt::UP * voxelsize[1] + VecInt::FORWARD * voxelsize[2],
             };
         }
     }

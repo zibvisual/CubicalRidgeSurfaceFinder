@@ -70,8 +70,8 @@ private:
 // const VecInt VecInt::RIGHT = {1, 0, 0};
 // const VecInt VecInt::UP = {0, 1, 0};
 // const VecInt VecInt::DOWN = {0, -1, 0};
-// const VecInt VecInt::FORWARD = {0, 0, -1};
-// const VecInt VecInt::BACKWARD = {0, 0, 1};
+// const VecInt VecInt::FORWARD = {0, 0, 1};
+// const VecInt VecInt::BACKWARD = {0, 0, -1};
 
 class VecSize
 {

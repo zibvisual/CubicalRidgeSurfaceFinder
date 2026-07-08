@@ -232,7 +232,7 @@ Eigen::Matrix3f structure_tensor(T* data, const Dims dims, const VecInt voxel, c
     auto gradient_end = VecInt(radius * 2 + 1);
     auto gradx = gauss_filter(input, window_dims, gradient_start, gradient_end, gradient_sigma, gradient_radius, VecInt::RIGHT);
     auto grady = gauss_filter(input, window_dims, gradient_start, gradient_end, gradient_sigma, gradient_radius, VecInt::UP);
-    auto gradz = gauss_filter(input, window_dims, gradient_start, gradient_end, gradient_sigma, gradient_radius, VecInt::BACKWARD);
+    auto gradz = gauss_filter(input, window_dims, gradient_start, gradient_end, gradient_sigma, gradient_radius, VecInt::FORWARD);
 
     auto tensor_start = VecInt(gradient_radius);
     auto tensor_end = gradient_end - gradient_radius;

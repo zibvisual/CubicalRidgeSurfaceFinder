@@ -122,8 +122,8 @@ const VecInt VecInt::LEFT = {-1, 0, 0};
 const VecInt VecInt::RIGHT = {1, 0, 0};
 const VecInt VecInt::UP = {0, 1, 0};
 const VecInt VecInt::DOWN = {0, -1, 0};
-const VecInt VecInt::FORWARD = {0, 0, -1};
-const VecInt VecInt::BACKWARD = {0, 0, 1};
+const VecInt VecInt::BACKWARD = {0, 0, -1};
+const VecInt VecInt::FORWARD = {0, 0, 1};
 
 const VecSize VecSize::MIN = {0, 0, 0};
 const VecSize VecSize::MAX = {std::numeric_limits<std::size_t>::max(), std::numeric_limits<std::size_t>::max(), std::numeric_limits<std::size_t>::max()};
