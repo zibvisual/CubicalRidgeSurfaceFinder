@@ -40,6 +40,15 @@ Images show the Smelt Petal and the Monkey Saddle example with the original outp
 ![Smelt Petal Ridge Surface Output](docs/images/smelt-petal_overview.png)
 ![Monkey Saddle Ridge Surface Output](docs/images/monkey-saddle_overview.png)
 
+## Parallelization
+
+If OpenMP is installed, the bilateral filter runs in parallel. 
+To turn OpenMP off, the flag `-D USE_OPENMP=OFF` can be used. So when building:
+```
+cmake -S . -B build/ -D CMAKE_BUILD_TYPE=Release -D CMAKE_POSITION_INDEPENDENT_CODE=ON -D USE_OPENMP=OFF
+cmake --build build/
+```
+
 ## Folder and File Structure
 
 - src: contains the source code library

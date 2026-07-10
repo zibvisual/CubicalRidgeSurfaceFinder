@@ -22,6 +22,7 @@
  #include <utils/parsing.hpp>
  
  #include <field/GridPositionBorderIterator.hpp>
+ #include <filter/bilateral.h>
  
  #include <filesystem>
  #include <vector>
@@ -303,10 +304,21 @@ int main(int argc, char *argv[])
          
          auto surf = surface::StaticSurface();
          m_finder.finalize(&surf);
+
+
+        //  std::filesystem::path default_output_name = input_name.parent_path() / input_name.stem().concat("_rsf_finalized.obj");
+        //  const auto output_name = program.present("-o").value_or(default_output_name);
+        //  surf.save(output_name);
+        //  std::cout << "Saved result in " << output_name << std::endl;
+
+        // generate smoothed surface
+        auto smoothed_surf = bilateral_filter(surf, 3.0* max_voxelsize, max_voxelsize, max_voxelsize, 5);
+
          std::filesystem::path default_output_name = input_name.parent_path() / input_name.stem().concat("_rsf_finalized.obj");
          const auto output_name = program.present("-o").value_or(default_output_name);
-         surf.save(output_name);
+         smoothed_surf.save(output_name);
          std::cout << "Saved result in " << output_name << std::endl;
+
  
          // debug
          if(debug){
