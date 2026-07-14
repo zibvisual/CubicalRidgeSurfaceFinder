@@ -60,6 +60,10 @@ public:
         return m_x * m_y * m_z;
     }
 
+    std::size_t max() const {
+        return std::max(m_x, std::max(m_y, m_z));
+    }
+
     std::size_t& operator[](int index){
         if(index == 0){
             return m_x;

@@ -35,6 +35,9 @@ SOFTWARE.
 #include <stdint.h>
 // #include <omp.h>
 
+#include <utils/Vec.hpp>
+#include <utils/Dims.hpp>
+
 static void pass12(const uint8_t* B, float* D, const size_t L, const float dx)
 /* Pass 1 and 2 for a line (stride 1, since only run along the first dimension) */
 {
@@ -143,14 +146,19 @@ static void pass34(float * D, // Read distances
 void
 edt(const uint8_t * B,
     float * D,
-    const size_t M, const size_t N, const size_t P,
-    const float dx, const float dy, const float dz)
+    const Dims dims,
+    const VecFloat voxelsize)
 {
 
     /* Size of buffers */
-    size_t nL = M;
-    N > nL ? nL = N : 0;
-    P > nL ? nL = P : 0;
+    const size_t nL = dims.max();
+    const size_t M = dims.x();
+    const size_t N = dims.y();
+    const size_t P = dims.z();
+
+    const float dx = voxelsize.x();
+    const float dy = voxelsize.y();
+    const float dz = voxelsize.z();
 
 #pragma omp parallel
     {

@@ -628,7 +628,7 @@ TEST_CASE("Distance Transform", "[distance]"){
 
     auto res = RawField<float>(segm.lattice());
 
-    edt(segm.data(), res.data(), segm.dims().x(), segm.dims().y(), segm.dims().z(), 1.0f, 1.0f, 1.0f);
+    edt(segm.data(), res.data(), segm.dims(), VecFloat(1.0f));
     res.save(__DATAPATH__+"/output/distance_transform_01.nrrd");
 
     REQUIRE(res.equals(dist));
