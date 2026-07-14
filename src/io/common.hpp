@@ -282,13 +282,16 @@ read(std::ifstream& inputFile, T* data, std::size_t size, std::endian endian)
     }
     else{
         // we need to buffer input
-        // TODO: this code get's stuck
         S buf[1024];
         auto counter = 0;
         while(counter < size){
             auto len = std::min(size - counter, static_cast<std::size_t>(1024));
             inputFile.read(reinterpret_cast<char*>(buf), len * sizeof(S));
-            std::endian::native == endian ? convert(buf, data, len) : convert_and_swap_endian(buf, data, len);
+            if(inputFile.eof() || inputFile.bad()){
+                throw std::runtime_error("Unexpected EOF");
+            }
+            std::endian::native == endian ? convert(buf, data + counter, len) : convert_and_swap_endian(buf, data + counter, len);
+            counter += len;
         }
     }
 }
