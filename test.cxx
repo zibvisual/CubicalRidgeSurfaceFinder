@@ -29,6 +29,9 @@
 #include <rsf/Amanatides.hpp>
 #include <field/GridPositionBorderIterator.hpp>
 
+#include <filter/bilateral.h>
+#include <filter/edt.h>
+
 #include <iostream>
 
 using Catch::Matchers::WithinULP;
@@ -101,6 +104,12 @@ TEST_CASE("Load Nrrd Files", "[nrrd][io]")
     val = img.get(lattice.gridLocation(VecFloat(4948.516f, 1045.377f, 313.600f)));
     REQUIRE(val.has_value());
     REQUIRE_THAT(val.value(), WithinULP(38.806f, 10));
+
+    // load non-float image as float
+    img = RawField<float>::load(__DATAPATH__+"/volumes/nrrd/membrane_u8.nrrd");
+    val = img.get(lattice.gridLocation(VecFloat(5520.315f, 777.600f, 313.600f)));
+    REQUIRE(val.has_value());
+    REQUIRE_THAT(val.value(), WithinULP(188.0f, 0));
 }
 
 TEST_CASE("Fast Marching Utilities", "[fm]")
@@ -594,4 +603,33 @@ TEST_CASE("VoxelTracer", "[voxel]"){
     REQUIRE(field.get(VecSize(16,7,4)).value() == 19.0f);
     // repeats at (21,7,4)
     REQUIRE(field.get(VecSize(26,7,4)).value() == 29.0f);
+}
+
+TEST_CASE("Bilateral Filtering Tree", "[bilateral-filter]")
+{
+    // load surface
+    auto surf = surface::StaticSurface::load(__DATAPATH__ + "/surfaces/tree.obj");
+
+    // bilateral filter parameters
+    float r = 30;
+    float sigma_d = 10;
+    float sigma_n = 10;
+    int nIter = 5;
+
+    // bilateral filter
+    surface::StaticSurface filteredSurface = bilateral_filter(surf, r, sigma_d, sigma_n, nIter);
+    auto amiraSurf = surface::StaticSurface::load(__DATAPATH__ + "/surfaces/tree_smoothed_5_30_10_10.obj");
+    REQUIRE(amiraSurf.equals(filteredSurface));
+}
+
+TEST_CASE("Distance Transform", "[distance]"){
+    auto segm = RawField<uint8_t>::load(__DATAPATH__+"/volumes/nrrd/segm01.nrrd");
+    auto dist = RawField<float>::load(__DATAPATH__+"/volumes/nrrd/dist01.nrrd");
+
+    auto res = RawField<float>(segm.lattice());
+
+    edt(segm.data(), res.data(), segm.dims().x(), segm.dims().y(), segm.dims().z(), 1.0f, 1.0f, 1.0f);
+    res.save(__DATAPATH__+"/output/distance_transform_01.nrrd");
+
+    REQUIRE(res.equals(dist));
 }

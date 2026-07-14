@@ -269,6 +269,10 @@ public:
         return std::make_pair(min, max);
     }
 
+    bool equals(const RawField<T>& other) const {
+        return m_view.equals(other.m_view);
+    }
+
 
     /** --------------------------------------------------------------------------- */
 

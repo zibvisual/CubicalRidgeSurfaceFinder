@@ -523,6 +523,18 @@ public:
     {
         return m_lattice.empty();
     }
+
+    bool equals(const RawFieldView<T>& other) const {
+        if(m_lattice.dims() != other.m_lattice.dims()){
+            return false;
+        }
+        for(std::size_t i = 0; i < m_lattice.dims().size(); ++i){
+            if(m_data[i] != other.m_data[i]){
+                return false;
+            }
+        }
+        return true;
+    }
     
 
 private:
