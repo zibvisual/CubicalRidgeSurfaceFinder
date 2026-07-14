@@ -23,6 +23,7 @@
  
  #include <field/GridPositionBorderIterator.hpp>
  #include <filter/bilateral.h>
+ #include <filter/edt.h>
  
  #include <filesystem>
  #include <vector>
@@ -49,7 +50,7 @@ int main(int argc, char *argv[])
     program.add_argument("algorithm").default_value(std::string{"shell"}).choices("fm", "shell");
     program.add_argument("--seed-range").default_value(0.8f).scan<'g', float>().help("Exclusion zone dependent on fast marching range and given multiplicative.");
     program.add_argument("--seed-threshold").scan<'g', float>().help("Min threshold. Everything under is not touched. [default: dynamic]");
-    program.add_argument("--seed-shift").nargs(0,1).scan<'g', float>().help("Distance how far a seed point is allowed to shift to go to the ridge. [implicit: --range * 0.1]");
+    program.add_argument("--seed-shift").scan<'g', float>().help("Distance how far a seed point is allowed to shift to go to the ridge. [default: --range * 0.1]");
 
     // fm settings
     program.add_argument("--min").scan<'g', float>().help("Min threshold of FM. Everything under is not touched. [default: min of image]");
@@ -59,6 +60,16 @@ int main(int argc, char *argv[])
     // processing
     program.add_argument("--border-padding").default_value(10).scan<'i', int>().help("How much the image should be extended. Given by voxel number.");
     program.add_argument("--border-margin").default_value(10).scan<'i', int>().help("How far away a seed point must be from the image border.");
+
+    // filter
+    program.add_argument("--smoothing-iteration").default_value(5).scan<'i', int>().help("Number of iterations of bilateral filter smoothing");
+    program.add_argument("--smoothing-radius").scan<'g', float>().help("Distance how far a seed point is allowed to shift to go to the ridge. [default: 3.0 * voxel size]");
+    program.add_argument("--smoothing-normal-radius").scan<'g', float>().help("[default: smoothing-radius / 3.0]");
+    program.add_argument("--smoothing-distance-radius").scan<'g', float>().help("[default: smoothing-radius / 3.0]");
+
+    auto &transform = program.add_mutually_exclusive_group();
+    transform.add_argument("-t", "--transform").default_value(false).implicit_value(true).help("Calculate the euclidean distance transform prior to ridge extraction.");
+    transform.add_argument("-p", "--probability").default_value(false).implicit_value(true).help("Given scalar field already represents probability map. No distance transform applied.");
 
     // spatial information
     auto &centering = program.add_mutually_exclusive_group();
@@ -98,16 +109,39 @@ int main(int argc, char *argv[])
     // load input
     std::cout << "------------------------------------------------" << std::endl;
     std::cout << "Load " << input_name << std::endl;
+
+    // read header
+    auto scalartype = io::probe_scalar_type(input_name);
+    bool default_apply_distance_transform = stype_is_integer(scalartype);
+    const bool apply_distance_transform = program.get<bool>("--probability") ? false : program.get<bool>("--transform") || default_apply_distance_transform;
+
     RawField<float> img;
-    try
-    {
-        // TODO: check if nrrd values were float/double. If it could be labels, we should warn the user!
-       img = RawField<float>::load(input_name, args.value());
-    }
-    catch (const std::exception &e)
-    {
-        std::cerr << e.what() << '\n';
-        return 1;
+    if(apply_distance_transform){
+        // load image as binary and calculate distance transform
+        try
+        {
+            auto segm = RawField<uint8_t>::load(input_name, args.value());
+            auto res = RawField<float>(segm.lattice());
+            std::cout << "Calculate Euclidean Distance Transform" << std::endl;
+            edt(segm.data(), res.data(), segm.dims(), segm.getVoxelSize());
+            img = res;
+        }
+        catch (const std::exception &e)
+        {
+            std::cerr << e.what() << '\n';
+            return 1;
+        }
+    }else{
+        // load probabilty map directly
+        try
+        {
+           img = RawField<float>::load(input_name, args.value());
+        }
+        catch (const std::exception &e)
+        {
+            std::cerr << e.what() << '\n';
+            return 1;
+        }
     }
  
     // Get min and max of image
@@ -116,7 +150,7 @@ int main(int argc, char *argv[])
     const auto img_max = img_min_max.second;
     const auto img_diff = img_max - img_min;
  
-     // Settings:
+    // Settings:
     auto debug_setting = parsing::flatten_arg<std::string>(program, "--debug", "debug");
     bool debug = debug_setting.has_value();
     std::filesystem::path debug_path = debug_setting.value_or("debug");
@@ -135,13 +169,18 @@ int main(int argc, char *argv[])
      
     const float default_shift_distance = fm_range * 0.1 * img.getVoxelSize().length();
     const float shift_distance_voxels = program.present<float>("--seed-shift").value_or(fm_range * 0.1);
-    // const std::optional<float> shift_distance_voxels = parsing::flatten_arg<float>(program, "--seed-shift", fm_range * 0.1);
     const float shift_distance = shift_distance_voxels * img.getVoxelSize().length();
     
     int border_padding = program.get<int>("--border-padding");
     int border_margin = program.get<int>("--border-margin");
+
+    const int smoothing_iteration = program.get<int>("--smoothing-iteration");
+    const float smoothing_radius = program.present<float>("--smoothing-radius").value_or(3.0f * img.getVoxelSize().max());
+    const float smoothing_normal_radius = program.present<float>("--smoothing-normal-radius").value_or(1.0f/3.0f * smoothing_radius);
+    const float smoothing_distance_radius = program.present<float>("--smoothing-distance-radius").value_or(1.0f/3.0f * smoothing_radius);
  
     // Print Settings
+    std::cout << " -------------- Settings START ------------- " << std::endl;
     std::cout << "Dims: " << img.dims() << std::endl;
     std::cout << "Voxelsize: " << img.getVoxelSize() << std::endl;
     if(debug){
@@ -162,6 +201,10 @@ int main(int argc, char *argv[])
     if(border_margin > 0){
         std::cout << "border margin of " << border_margin << std::endl;
     }
+    if(smoothing_iteration > 0){
+        std::cout << "Bilateral Filter Smoothing with " << smoothing_iteration << " iterations, radius of " << smoothing_radius << " with normal radius weight of " << smoothing_normal_radius << " and distance radius weight of " << smoothing_distance_radius << std::endl;
+    }
+    std::cout << " -------------- Settings END ------------- " << std::endl;
  
      // generate seeds
      std::vector<ridgesurface::Seed> seeds;
@@ -300,40 +343,40 @@ int main(int argc, char *argv[])
             m_finder.recalculate();
         }
  
-         std::cout << "Number of seeds actively used: " << m_finder.numOfSeeds() << std::endl;
-         
-         auto surf = surface::StaticSurface();
-         m_finder.finalize(&surf);
+        std::cout << "Number of seeds actively used: " << m_finder.numOfSeeds() << std::endl; 
+        auto surf = surface::StaticSurface();
+        m_finder.finalize(&surf);
 
-
-        //  std::filesystem::path default_output_name = input_name.parent_path() / input_name.stem().concat("_rsf_finalized.obj");
-        //  const auto output_name = program.present("-o").value_or(default_output_name);
-        //  surf.save(output_name);
-        //  std::cout << "Saved result in " << output_name << std::endl;
-
+        std::filesystem::path default_output_name = input_name.parent_path() / input_name.stem().concat("_rsf.obj");
+        const auto output_name = program.present("-o").value_or(default_output_name);
+        const int smoothing_iteration = program.get<int>("--smoothing-iteration");
+        const float smoothing_radius = program.present<float>("--smoothing-radius").value_or(3.0f * img.getVoxelSize().max());
+        const float smoothing_normal_radius = program.present<float>("--smoothing-normal-radius").value_or(1.0f/3.0f * smoothing_radius);
+        const float smoothing_distance_radius = program.present<float>("--smoothing-distance-radius").value_or(1.0f/3.0f * smoothing_radius);
+        if(smoothing_iteration <= 0){
+            // save if no smoothing wished for
+            surf.save(output_name);
+        }
+        
         // generate smoothed surface
-        auto smoothed_surf = bilateral_filter(surf, 3.0* max_voxelsize, max_voxelsize, max_voxelsize, 5);
+        auto smoothed_surf = bilateral_filter(surf, smoothing_radius, smoothing_distance_radius, smoothing_normal_radius, smoothing_iteration);
+        smoothed_surf.save(output_name);
+        std::cout << "Saved result in " << output_name << std::endl;
 
-         std::filesystem::path default_output_name = input_name.parent_path() / input_name.stem().concat("_rsf_finalized.obj");
-         const auto output_name = program.present("-o").value_or(default_output_name);
-         smoothed_surf.save(output_name);
-         std::cout << "Saved result in " << output_name << std::endl;
-
+        // debug
+        if(debug){
+            m_finder.save_debug_information(debug_path / input_name.stem() / input_name.stem().concat("_rsf_"));
+            patched_surface.save_each_patch(debug_path / input_name.stem() / "patches" / input_name.stem().concat("_rsf_"));
+        }
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << e.what() << '\n';
+        return 1;
+    }
  
-         // debug
-         if(debug){
-             m_finder.save_debug_information(debug_path / input_name.stem() / input_name.stem().concat("_rsf_"));
-             patched_surface.save_each_patch(debug_path / input_name.stem() / "patches" / input_name.stem().concat("_rsf_"));
-         }
-     }
-     catch (const std::exception &e)
-     {
-         std::cerr << e.what() << '\n';
-         return 1;
-     }
- 
-     // reporter.end();
-     auto time_end = std::chrono::steady_clock::now();
-     std::cout << "MidMembrane finished! [" << (std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_begin).count() / 1000000.0) << " sec]" << std::endl;
-     return 0;
+    // reporter.end();
+    auto time_end = std::chrono::steady_clock::now();
+    std::cout << "MidMembrane finished! [" << (std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_begin).count() / 1000000.0) << " sec]" << std::endl;
+    return 0;
  }

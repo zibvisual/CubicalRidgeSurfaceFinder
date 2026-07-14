@@ -25,6 +25,28 @@
  * Neighbors are calculated with the help of the bounding box to check if they are still inside the field?
  */
 
+namespace io {
+    inline stype_t probe_scalar_type(std::filesystem::path input){
+        // check extension
+        if(!input.has_extension()){
+            throw std::invalid_argument("File extension necessary");
+        }
+        auto extension = input.extension();
+        if(extension == ".nrrd"){
+            auto stream = path_to_ifstream(input, "nrrd");
+            auto header = nrrd::read_nrrd_header(stream);
+            if(!header){
+                throw std::invalid_argument("Not a valid/supported nrrd file");
+            }
+            return header->type;
+        }else if (extension == ".npy"){
+            auto header = npy::parse_header(input);
+            return header.dtype.stype;
+        }
+        throw std::invalid_argument("Extension not supported");
+    }
+}
+
 
 /**
  * Each Field may use its own FieldLocation. Each Field is responsible for indexing, bounds checking and moving locations

@@ -63,6 +63,26 @@ enum class stype_t
     f64,
 };
 
+inline bool stype_is_integer(const stype_t& stype)
+{
+    switch (stype)
+    {
+    case stype_t::int8:
+    case stype_t::int16:
+    case stype_t::int32:
+    case stype_t::int64:
+    case stype_t::uint8:
+    case stype_t::uint16:
+    case stype_t::uint32:
+    case stype_t::uint64:
+        return true;
+    case stype_t::f32:
+    case stype_t::f64:
+    default:
+        return false;
+    }
+}
+
 inline std::string to_c_string(const stype_t& stype)
 {
     switch (stype)
