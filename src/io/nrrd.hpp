@@ -84,9 +84,18 @@ write_nrrd(std::ofstream& outputFile, nrrd_data<T> data, std::string encoding = 
     }
 }
 
-template <typename T>
-std::optional<nrrd_data<T>>
-read_nrrd(std::ifstream& inputFile, SpatialArguments command_args = SpatialArguments())
+struct nrrd_header {
+    bool raw_encoding;
+    stype_t type = stype_t::invalid;
+    std::endian endian = std::endian::native;
+    Dims sizes;
+    std::optional<VecFloat> spacings;
+    std::optional<VecFloat> spaceMins;
+    std::optional<VecFloat> spaceMaxs;
+    std::optional<bool> centered;
+};
+
+inline std::optional<nrrd_header> read_nrrd_header(std::ifstream& inputFile)
 {
     if(!is_nrrd_file(inputFile)){
         return {};
@@ -113,7 +122,7 @@ read_nrrd(std::ifstream& inputFile, SpatialArguments command_args = SpatialArgum
     std::optional<VecFloat> spaceMaxs;
     std::optional<bool> centered;
 
-    int encoding = 0;
+    bool encoding = false;
 
     while (std::getline(inputFile, line))
     {
@@ -229,69 +238,47 @@ read_nrrd(std::ifstream& inputFile, SpatialArguments command_args = SpatialArgum
         return {};
     }
 
-    // create spatial args
-    SpatialArguments args = SpatialArguments();
-    if (spaceMins && spaceMaxs)
-    {
-        args.bbox = GenericBBox(spaceMins.value(), spaceMaxs.value());
-    }
-    args.origin = spaceMins;
-    args.voxelsize = spacings;
-    args.bbox_signal = centered;
-    args.origin_signal = centered;
-
-    // create lattice
-    Lattice lattice = args.update(command_args).toInformation().toLattice(sizes);
-
-    auto size = sizes.size();
-    auto data = std::vector<T>(size);
-
-    if(!encoding){
-        // ascii
-        fillScalarField(inputFile, data.data(), size);
-        return nrrd_data{lattice, data};
-    }
-
+    stype_t scalar_type;
     // binary/raw
     if (type == "signed char" || type == "int8" || type == "int8_t")
     {
-        read<int8_t, T>(inputFile, data.data(), size, endian);
+        scalar_type = stype_t::int8;
     }
     else if (type == "uchar" || type == "unsigned char" || type == "uint8" || type == "uint8_t")
     {
-        read<uint8_t, T>(inputFile, data.data(), size, endian);
+        scalar_type = stype_t::uint8;
     }
     else if (type == "short" || type == "short int" || type == "signed short" || type == "signed short int" || type == "int16" || type == "int16_t")
     {
-        read<int16_t, T>(inputFile, data.data(), size, endian);
+        scalar_type = stype_t::int16;
     }
     else if (type == "ushort" || type == "unsigned short" || type == "unsigned short int" || type == "uint16" || type == "uint16_t")
     {
-        read<uint16_t, T>(inputFile, data.data(), size, endian);
+        scalar_type = stype_t::uint16;
     }
     else if (type == "int" || type == "signed int" || type == "int32" || type == "int32_t")
     {
-        read<int32_t, T>(inputFile, data.data(), size, endian);
+        scalar_type = stype_t::int32;
     }
     else if (type == "uint" || type == "unsigned int" || type == "uint32" || type == "uint32_t")
     {
-        read<uint32_t, T>(inputFile, data.data(), size, endian);
+        scalar_type = stype_t::uint32;
     }
     else if (type == "longlong" || type == "long long" || type == "long long int" || type == "signed long long" || type == "signed long long int" || type == "int64" || type == "int64_t")
     {
-        read<int64_t, T>(inputFile, data.data(), size, endian);
+        scalar_type = stype_t::int64;
     }
     else if (type == "ulonglong" || type == "unsigned long long" || type == "unsigned long long int" || type == "uint64" || type == "uint64_t")
     {
-        read<uint64_t, T>(inputFile, data.data(), size, endian);
+        scalar_type = stype_t::uint64;
     }
     else if (type == "float")
     {
-        read<float, T>(inputFile, data.data(), size, endian);
+        scalar_type = stype_t::f32;
     }
     else if (type == "double")
     {
-        read<double, T>(inputFile, data.data(), size, endian);
+        scalar_type = stype_t::f64;
     }
     else
     {
@@ -299,6 +286,64 @@ read_nrrd(std::ifstream& inputFile, SpatialArguments command_args = SpatialArgum
         return {};
     }
 
+    return nrrd_header {
+        encoding,
+        scalar_type,
+        endian,
+        sizes,
+        spacings,
+        spaceMins,
+        spaceMaxs,
+        centered,
+    };
+}
+
+template <typename T>
+std::optional<nrrd_data<T>>
+read_nrrd(std::ifstream& inputFile, SpatialArguments command_args = SpatialArguments())
+{
+    auto header_opt = read_nrrd_header(inputFile);
+    if(!header_opt){
+        return {};
+    }
+    auto header = header_opt.value();
+
+    // create spatial args
+    SpatialArguments args = SpatialArguments();
+    if (header.spaceMins && header.spaceMaxs)
+    {
+        args.bbox = GenericBBox(header.spaceMins.value(), header.spaceMaxs.value());
+    }
+    args.origin = header.spaceMins;
+    args.voxelsize = header.spacings;
+    args.bbox_signal = header.centered;
+    args.origin_signal = header.centered;
+
+    // create lattice
+    Lattice lattice = args.update(command_args).toInformation().toLattice(header.sizes);
+
+    auto size = header.sizes.size();
+    auto data = std::vector<T>(size);
+
+    if(!header.raw_encoding){
+        // ascii
+        fillScalarField(inputFile, data.data(), size);
+        return nrrd_data{lattice, data};
+    }
+
+    // binary/raw
+    switch(header.type) {
+        case stype_t::int8: read<int8_t, T>(inputFile, data.data(), size, header.endian); break;
+        case stype_t::uint8: read<uint8_t, T>(inputFile, data.data(), size, header.endian); break;
+        case stype_t::int16: read<int16_t, T>(inputFile, data.data(), size, header.endian); break;
+        case stype_t::uint16: read<uint16_t, T>(inputFile, data.data(), size, header.endian); break;
+        case stype_t::int32: read<int32_t, T>(inputFile, data.data(), size, header.endian); break;
+        case stype_t::uint32: read<uint32_t, T>(inputFile, data.data(), size, header.endian); break;
+        case stype_t::int64: read<int64_t, T>(inputFile, data.data(), size, header.endian); break;
+        case stype_t::uint64: read<uint64_t, T>(inputFile, data.data(), size, header.endian); break;
+        case stype_t::f32: read<float, T>(inputFile, data.data(), size, header.endian); break;
+        case stype_t::f64: read<double, T>(inputFile, data.data(), size, header.endian); break;
+    }
     return nrrd_data{lattice, data};
 }
 
