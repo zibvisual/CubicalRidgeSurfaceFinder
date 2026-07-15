@@ -159,8 +159,9 @@ edt(const uint8_t * B,
     const float dx = voxelsize.x();
     const float dy = voxelsize.y();
     const float dz = voxelsize.z();
-
+#ifdef _OPENMP
 #pragma omp parallel
+#endif
     {
         int * S = static_cast<int*>(calloc(nL, sizeof(int)));
         assert(S != NULL);
@@ -169,7 +170,9 @@ edt(const uint8_t * B,
         float * D0 = static_cast<float*>(calloc(nL, sizeof(float)));
         assert(D0 != NULL);
 
+#ifdef _OPENMP
 #pragma omp for
+#endif
         for(size_t kk = 0; kk < N*P; kk++) // For each column
         {
             size_t offset = kk*M;
@@ -179,7 +182,9 @@ edt(const uint8_t * B,
 
         for(size_t kk = 0; kk < P; kk++) // slice
         {
+#ifdef _OPENMP
 #pragma omp for
+#endif
             for(size_t ll = 0; ll<M; ll++) // row
             {
                 size_t offset = kk*M*N + ll;
@@ -191,7 +196,9 @@ edt(const uint8_t * B,
         {
         for(size_t kk = 0; kk<M; kk++)
         {
+#ifdef _OPENMP
 #pragma omp for
+#endif
             for(size_t ll = 0; ll<N; ll++)
             {
                 size_t offset = kk + ll*M;
